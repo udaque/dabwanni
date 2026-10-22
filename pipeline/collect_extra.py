@@ -39,7 +39,7 @@ if __name__ == '__main__':
         def canary():
             d = http.json(MB + 'release-group?fmt=json&limit=1&query=' + urllib.parse.quote('cowboy bebop'))
             return 'release-groups' in (d or {})
-        run_source('music', W, work, canary=(canary, 'MusicBrainz 검색'), budget_min=a.budget_min, max_empty=0.99)
+        run_source('music', W, work, canary=(canary, 'MusicBrainz 검색'), budget_min=a.budget_min, max_empty=None)
     else:
         http = Http(0.5)
         W = [w for w in W if w.get('bgm')]
@@ -55,4 +55,4 @@ if __name__ == '__main__':
             r = {'city': d.get('city'), 'count': d.get('pointsLength'), 'map': f"https://anitabi.cn/map?bangumiId={w['bgm']}",
                  'points': [{'name': p.get('name'), 'ep': p.get('ep'), 'image': p.get('image'), 'geo': p.get('geo')} for p in d.get('litePoints', [])]} if d and d.get('pointsLength') else {}
             save('anitabi', w['k'], r); return r
-        run_source('anitabi', W, work, canary=(lambda: (lite(115908) or {}).get('pointsLength'), '울려라! 유포니엄'), budget_min=a.budget_min, max_empty=0.99)
+        run_source('anitabi', W, work, canary=(lambda: (lite(115908) or {}).get('pointsLength'), '울려라! 유포니엄'), budget_min=a.budget_min, max_empty=None)

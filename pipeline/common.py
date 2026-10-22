@@ -44,7 +44,7 @@ def load(src, k):
     except Exception: return None
     if isinstance(d, dict): d.pop('_at', None)
     return d
-def _empty(o): return o is None or o == {} or o == [] or (isinstance(o, dict) and not any(v for k, v in o.items() if not k.startswith('_')))
+def _empty(o): return o is None or o == {} or o == [] or (isinstance(o, dict) and not any(v for k, v in o.items() if not str(k).startswith('_')))
 def save(src, k, obj):
     """빈 결과로 기존의 좋은 데이터를 덮어쓰지 않음. 받은 시각(_at)을 함께 기록."""
     p = raw_path(src, k)
@@ -157,7 +157,7 @@ class Run:
         if n >= self.min_n:
             if self.c['fail'] / n > self.max_fail:
                 self.fail_source(f"실패율 {self.c['fail']}/{n}이 기준({int(self.max_fail * 100)}%)을 넘음"); raise Abort()
-            if self.c['empty'] / n > self.max_empty and self.c['ok'] == 0:
+            if self.max_empty is not None and self.c['empty'] / n > self.max_empty and self.c['ok'] == 0:
                 self.fail_source(f"빈 응답만 {self.c['empty']}건: 주소나 형식이 바뀌었을 가능성"); raise Abort()
         if n and n % 200 == 0: self.say(f"진행 {self.c}")
         if not self.time_left():

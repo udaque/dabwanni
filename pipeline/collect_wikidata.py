@@ -17,7 +17,7 @@ Q = {
  OPTIONAL{?co rdfs:label ?ko FILTER(lang(?ko)="ko")} OPTIONAL{?co rdfs:label ?ja FILTER(lang(?ja)="ja")}
  OPTIONAL{?co rdfs:label ?en FILTER(lang(?en)="en")} OPTIONAL{?co wdt:P571 ?founded} } LIMIT %d OFFSET %d''',
 }
-MIN_ROWS = {'works': 10000, 'people': 10000, 'studios': 300}   # 이보다 적으면 형식 변경으로 보고 저장하지 않음
+MIN_ROWS = {'works': 3000, 'people': 3000, 'studios': 100}   # 이보다 적으면 형식 변경으로 보고 저장하지 않음 (첫 실행 기준 작품 약 7,400행)
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(); budget_arg(ap); a = ap.parse_args()
@@ -33,7 +33,7 @@ if __name__ == '__main__':
             run.say(f"{x['k']} {len(rows)}행")
             if len(b) < step: break
             off += step
-        if len(rows) < MIN_ROWS[x['k']]: raise SchemaError(f"{x['k']} 결과가 {len(rows)}행뿐이라 저장하지 않음")
+        if len(rows) < MIN_ROWS[x['k']]: raise ValueError(f"{x['k']} 결과가 {len(rows)}행뿐이라 저장하지 않음 (형식 변경 의심)")
         save('wikidata', x['k'], rows); return rows
     run_source('wikidata', [{'k': k} for k in Q], work,
-               canary=(lambda: sparql('SELECT ?i WHERE { ?i wdt:P4086 "1" } LIMIT 1'), '카우보이 비밥 MAL 1'), budget_min=a.budget_min, min_n=1)
+               canary=(lambda: sparql('SELECT ?i WHERE { ?i wdt:P4086 "1" } LIMIT 1'), '카우보이 비밥 MAL 1'), budget_min=a.budget_min, min_n=99)
