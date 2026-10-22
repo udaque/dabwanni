@@ -4,7 +4,7 @@ import argparse
 from common import *
 
 NAME = 'name{first last full native alternative}'
-Q = '''query($id:Int,$page:Int){Media(id:$id,type:ANIME){id countryOfOrigin source isAdult averageScore meanScore popularity favourites
+Q = '''query($id:Int,$page:Int){Media(id:$id,type:ANIME){id status episodes startDate{year month day} endDate{year month day} nextAiringEpisode{episode airingAt} countryOfOrigin source isAdult averageScore meanScore popularity favourites
  title{native english romaji} genres tags{name rank isMediaSpoiler}
  trailer{id site} externalLinks{site url type language}
  studios{edges{isMain node{id name isAnimationStudio}}}

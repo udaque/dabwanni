@@ -72,6 +72,65 @@ for x in a:
     rec['bgm']=b.get('bgm'); rec['site']=b.get('site'); rec['vod']={'JP':b['jp'],'US':b['us']} if b else None
     rec['tags']=[t for t in x['tags'] if t in TAG_KO]
     key2i[k]=len(out); out.append(rec)
+# ── 중복 합치기 ─────────────────────────────────────────────
+# 원천 목록(manami)은 출처끼리 정보가 다르면 같은 작품을 따로 둡니다(예: AniDB만, anisearch만 있는 항목).
+# 같은 AniDB ID이거나, 형식·연도가 같고 일본어 제목 또는 로마자 제목이 같으면 한 작품으로 합칩니다.
+import unicodedata
+def nja(t):
+    t = unicodedata.normalize('NFKC', t or '')
+    return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
+def nro(t):
+    t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
+    t = re.sub(r'[^a-z0-9]', '', t)
+    t = t.replace('wo', 'o').replace('ou', 'o').replace('uu', 'u').replace('oo', 'o')
+    return t
+par = list(range(len(out)))
+def find(i):
+    while par[i] != i: par[i] = par[par[i]]; i = par[i]
+    return i
+ids = [{('al', r['al'])} if r['al'] else set() for r in out]
+for i, r in enumerate(out):
+    if r['mal']: ids[i].add(('mal', r['mal']))
+def union(a, b):
+    a, b = find(a), find(b)
+    if a == b: return
+    # 원천 목록이 서로 다른 AniList·MAL ID로 따로 둔 작품끼리는 합치지 않음 (분할 2쿨 등 제목이 같은 다른 작품 보호)
+    ka = {k for k, _ in ids[a]}; kb = {k for k, _ in ids[b]}
+    if any(x in ka and x in kb and {v for k, v in ids[a] if k == x} != {v for k, v in ids[b] if k == x} for x in ('al', 'mal')): return
+    lo, hi = min(a, b), max(a, b); par[hi] = lo; ids[lo] |= ids[hi]
+buckets = collections.defaultdict(list)
+for i, r in enumerate(out):
+    if r['adb']: buckets[('adb', r['adb'])].append(i)
+    ty = r['ty'] if r['ty'] != 'X' else None
+    for key in {nja(r['ja']), nro(r['r'])}:
+        if len(key) >= 4: buckets[('t', key, r['y'])].append(i)
+for (kind, *rest), idx in buckets.items():
+    for j in idx[1:]:
+        a, b = out[idx[0]], out[j]
+        if kind == 't' and a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
+        union(idx[0], j)
+groups = collections.defaultdict(list)
+for i in range(len(out)): groups[find(i)].append(i)
+def rank(r): return (bool(r['al']), bool(r['mal']), bool(r['adb']), r['p'][:1] in ('M', 'A'))
+merged = []
+for g in groups.values():
+    rs = sorted((out[i] for i in g), key=rank, reverse=True)
+    m = dict(rs[0])
+    for o in rs[1:]:
+        for f in ('ja', 'ko', 'en', 'y', 'q', 'd', 'tmdb', 'tms', 'sy', 'an', 'bgm', 'site', 'vod'):
+            if not m.get(f) and o.get(f): m[f] = o[f]
+        if not m['p'] and o['p']: m['p'] = o['p']
+        if (o.get('e') or 0) > (m.get('e') or 0): m['e'] = o['e']      # 방영 전 자리표시(1화)보다 큰 값이 실제에 가까움
+        m['rel'] = m['rel'] + [x for x in o['rel'] if x not in m['rel']]
+        m['tags'] = m['tags'] + [t for t in o['tags'] if t not in m['tags']]
+        m.setdefault('_alias', []).append(o['k'])
+    merged.append(m)
+print('중복 합치기:', len(out), '→', len(merged))
+out = merged
+key2i = {r['k']: i for i, r in enumerate(out)}
+alias = {a: r['k'] for r in out for a in r.get('_alias', [])}
+for r in out: r.pop('_alias', None)
+
 # resolve relations to keys
 url2k={}
 for r in out:
@@ -82,7 +141,7 @@ for r in out:
     for u in r['rel']:
         m=re.search(r'(anilist\.co/anime/\d+|myanimelist\.net/anime/\d+)',u)
         if m and m.group(1) in url2k and url2k[m.group(1)]!=r['k']: rel.add(url2k[m.group(1)])
-    r['rel']=sorted(rel)
+    r['rel']=sorted(alias.get(x, x) for x in rel if alias.get(x, x) != r['k'])
 print(len(out),dropped)
 print(collections.Counter(bool(r['ko']) for r in out),collections.Counter(bool(r['ja']) for r in out))
 print(collections.Counter((r['y']//10*10 if r['y'] else None) for r in out))

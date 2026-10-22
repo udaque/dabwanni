@@ -149,6 +149,9 @@ def main():
         work_names = [x for x in (ko, w.get('ja')) if x]
         cur_work[0] = (w.get('ja'), ko)
         if al:
+            stmap = {'FINISHED': 'F', 'RELEASING': 'O', 'NOT_YET_RELEASED': 'U', 'CANCELLED': 'C', 'HIATUS': 'H'}
+            if al.get('status') in stmap: w['st'] = stmap[al['status']]
+            if al.get('episodes'): w['e'] = al['episodes']
             if al.get('countryOfOrigin') and al['countryOfOrigin'] != 'JP': nonjp[k] = al['countryOfOrigin']
             if al.get('source'): d['source'] = SOURCE_KO.get(al['source'], al['source'])
             d['genres'] = [GENRE_KO.get(g, g) for g in al.get('genres') or []]
@@ -296,9 +299,11 @@ def main():
     json.dump(nonjp, open(os.path.join(SITE, 'data', 'nonjp.json'), 'w'), separators=(',', ':'))
     # 카탈로그에 한국어 제목·제작사 한국어명 반영
     cp = os.path.join(SITE, 'data', 'catalog.json'); c = json.load(open(cp, encoding='utf-8'))
-    ki = c['fields'].index('ko'); n_ko = 0
+    ki, si, ei = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'); n_ko = 0
     for r in c['rows']:
-        if not r[ki] and BY[r[0]].get('ko'): r[ki] = BY[r[0]]['ko']; n_ko += 1
+        w = BY[r[0]]
+        if not r[ki] and w.get('ko'): r[ki] = w['ko']; n_ko += 1
+        r[si], r[ei] = w.get('st'), w.get('e')
     for s in c['studios']:
         if s[3] in studios and not studios[s[3]]['name'].get('auto'): s[1], s[2] = studios[s[3]]['name']['ko'], False
     json.dump(c, open(cp, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))

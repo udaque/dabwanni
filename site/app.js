@@ -38,10 +38,24 @@ async function item(kind, id){
 function lenKind(w){ const m = w.d ? w.d / 60 : null; if (m == null) return null; return m <= 5 ? 'short' : m <= 17 ? 'half' : m <= 35 ? 'normal' : 'long'; }
 function title(w, lang = S.lang){ const o = {ko:w.ko, ja:w.ja, en:w.en, r:w.r}; return o[lang] || o.ko || o.ja || o.en || o.r; }
 function subtitle(w){ const t = title(w); return (S.lang === 'ja' ? [w.ko, w.en, w.r] : [w.ja, w.en, w.r]).find(x => x && x !== t) || ''; }
+// 키 비주얼: MAL은 기본(약 225px)과 큰 것(l, 약 425px)을 화면 밀도에 맞춰 고르게 함
 function img(w, big){
   if (!w.p) return '';
-  if (w.p[0] === 'M') { const p = w.p.slice(1); return 'https://cdn.myanimelist.net/images/anime/' + (big ? p : p.replace(/\.(jpg|webp)$/, 't.$1')); }
-  return w.p[0] === 'A' ? w.p.slice(1) : '';
+  if (w.p[0] === 'M') { const p = w.p.slice(1); return 'https://cdn.myanimelist.net/images/anime/' + (big ? p.replace(/\.(jpg|webp)$/, 'l.$1') : p); }
+  if (w.p[0] === 'A') return w.p.slice(1);
+  return /^https:\/\//.test(w.p) ? w.p : '';
+}
+function srcset(w){
+  if (w.p && w.p[0] === 'M') { const b = 'https://cdn.myanimelist.net/images/anime/' + w.p.slice(1); return `${b} 225w, ${b.replace(/\.(jpg|webp)$/, 'l.$1')} 425w`; }
+  return '';
+}
+// 방영 상태: 원천 목록의 '방영 예정'은 늦게 갱신되므로, 시작 분기가 지났으면 표시하지 않음
+function curQ(){ const d = new Date(); return d.getFullYear() * 10 + Math.floor(d.getMonth() / 3) + 1; }
+function statusLabel(w){
+  if (w.st === 'O') return '방영 중';
+  if (w.st === 'H') return '휴방 중';
+  if (w.st === 'U') { const s = w.y ? w.y * 10 + (w.q || 1) : null; return (!s || s > curQ()) ? '방영 예정' : ''; }
+  return '';
 }
 function norm(s){ return (s || '').toLowerCase().normalize('NFKC').replace(/[\s\-_:;!?！？・･.,'"“”‘’()（）\[\]「」『』~〜]/g, ''); }
 const total = w => w.e || 0;
@@ -191,8 +205,7 @@ function infoPills(w){
   const p = [`<span class="pill">${TYPE[w.ty]}</span>`];
   if (w.e) p.push(`<span class="pill">${w.e}화</span>`);
   if (w.d) p.push(`<span class="pill">${fmtDur(w.d)}</span>`);
-  if (w.st === 'O') p.push(`<span class="pill">방영 중</span>`);
-  if (w.st === 'U') p.push(`<span class="pill">방영 예정</span>`);
+  const sl = statusLabel(w); if (sl) p.push(`<span class="pill">${sl}</span>`);
   return p.join('');
 }
 function progText(w){ const m = marks[w.k] || {}, t = total(w); return `${m.ep || 0}${t ? ` <small>/ ${t}화</small>` : '<small>화</small>'}`; }
@@ -200,7 +213,7 @@ function progCtl(w){ return `<div class="prog"><button class="step" data-act="ep
 function card(w){
   const m = marks[w.k] || {}, src = img(w), k = esc(w.k);
   return `<div class="card">
-    <button class="kv" data-act="open" data-k="${k}" aria-label="${esc(title(w))} 자세히"><span class="nokv">키 비주얼 없음</span>${src ? `<img loading="lazy" src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="badges" data-k="${k}">${badges(w)}</span></button>
+    <button class="kv" data-act="open" data-k="${k}" aria-label="${esc(title(w))} 자세히"><span class="nokv">키 비주얼 없음</span>${src ? `<img loading="lazy" src="${esc(src)}" ${srcset(w) ? `srcset="${esc(srcset(w))}" sizes="(max-width:420px) 46vw, 180px"` : ''} alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="badges" data-k="${k}">${badges(w)}</span></button>
     <div class="meta"><div class="t1 ${S.lang === 'ja' ? 'ja' : ''}" data-act="open" data-k="${k}">${esc(title(w))}</div><div class="t2">${esc(subtitle(w))}</div><div class="pills">${infoPills(w)}</div></div>
     ${progCtl(w)}
     <div class="acts"><button class="tg w ${m.w ? 'on' : ''}" data-act="w" data-k="${k}">봤음</button><button class="tg i ${m.i ? 'on' : ''}" data-act="i" data-k="${k}">관심</button></div>
