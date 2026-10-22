@@ -12,6 +12,8 @@ jobs:
           token: ${{ secrets.BOOT_TOKEN }}
       - name: 압축 풀고 커밋
         run: |
+          # 적용 커밋이 update.zip을 지우는 것도 이 작업을 다시 깨우므로, 파일이 없으면 조용히 끝냄
+          [ -f update.zip ] || { echo "적용할 update.zip이 없습니다 (방금 적용을 마친 커밋)"; exit 0; }
           unzip -o update.zip
           git rm -q update.zip
           git config user.name "dabwanni-bot"
