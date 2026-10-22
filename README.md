@@ -1,1 +1,71 @@
-# dabwanni
+# 다봤니
+
+일본 애니메이션 전 작품 데이터베이스와 시청 기록 사이트입니다.
+`site/`는 사이트, `pipeline/`은 데이터 수집기, `.github/workflows/update.yml`은 매일 자동 갱신입니다.
+
+## 처음 설정 (한 번만)
+
+### 1. GitHub 저장소
+이 폴더를 새 저장소로 올립니다. **공개 저장소를 추천합니다.** 공개 저장소는 GitHub Actions 실행 시간이 무료이고,
+비밀 키와 수집 데이터는 저장소에 들어가지 않습니다(비밀 설정과 R2에 보관).
+
+### 2. Cloudflare
+- **Pages 프로젝트**: Workers & Pages → 만들기 → Pages → 직접 업로드로 `dabwanni` 프로젝트를 만듭니다 (이름을 바꾸면 아래 `CF_PAGES_PROJECT` 변수에 적기).
+- **API 토큰**: 내 프로필 → API 토큰 → 「Cloudflare Pages 편집」 권한으로 만듭니다.
+- **R2 버킷**: R2 → 버킷 만들기(예: `dabwanni-raw`) → R2 API 토큰 만들기(객체 읽기·쓰기). 수집 원본과 로그를 보관합니다.
+  R2를 설정하지 않으면 GitHub 캐시에 보관하는데, 7일 동안 쓰지 않으면 지워지고 10GB 제한이 있어 권장하지 않습니다.
+
+### 3. TMDB
+themoviedb.org 가입 → 설정 → API에서 키(v3)를 받습니다. 없으면 한국어 제목·회차 제목·OTT 수집만 건너뜁니다.
+
+### 4. GitHub 비밀 설정
+저장소 → Settings → Secrets and variables → Actions
+- Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `TMDB_API_KEY`
+- Variables (선택): `CF_PAGES_PROJECT`(기본 dabwanni), `NAMU_DUMP_URL`(나무위키 덤프 파일 주소, JSON 또는 Parquet)
+
+### 5. 첫 실행
+Actions → 다봤니 데이터 갱신 → Run workflow. 한 번에 최대 약 5시간 반 동안 받고 멈추며, 이후 매일 이어 받습니다.
+전체를 처음 다 받는 데는 며칠 걸립니다(AniList가 가장 오래 걸림). 받은 만큼은 매번 사이트에 바로 반영됩니다.
+
+## 아이폰에서 실행
+- **GitHub 앱**: 저장소 → Actions → 다봤니 데이터 갱신 → Run workflow
+- **단축어 버튼** (홈 화면에서 한 번 누르기):
+  1. GitHub → Settings → Developer settings → Fine-grained tokens에서 이 저장소만, 권한 「Actions: Read and write」로 토큰 생성
+  2. 단축어 앱 → 새 단축어 → 「URL 콘텐츠 가져오기」 추가
+     - URL: `https://api.github.com/repos/<계정>/<저장소>/actions/workflows/update.yml/dispatches`
+     - 방법: POST
+     - 헤더: `Accept` = `application/vnd.github+json`, `Authorization` = `Bearer <토큰>`
+     - 본문(JSON): `ref` = `main`
+  3. 이어서 「알림 보기」에 「갱신을 시작했습니다」를 넣고, 홈 화면에 추가
+  - 일부 단계만: 본문에 `inputs` 사전을 추가하고 `only` = `syoboi,tmdb`
+
+## 갱신 규칙
+- 새 작품: 아직 안 받은 작품은 모두 받음
+- 방영 중·예정 작품과 올해·작년 작품: 3~7일마다 다시 받음 (새 회차·스태프 반영)
+- OTT: 7일마다 전체 다시
+- Wikidata(한국어 이름): 7일마다, 나무위키 덤프: 25일마다, 작품 목록: 매일
+- 받아 둔 좋은 데이터는 빈 응답으로 덮어쓰지 않음
+
+## 실패 감지와 로그
+- 출처마다 결과를 아는 요청으로 먼저 시험해, 주소가 바뀌었거나 차단되면 그 출처만 중단하고 나머지는 계속
+- 응답 형식이 바뀌거나, 실패율 20% 초과, 빈 응답만 계속되면 그 출처를 중단하고 실패로 기록
+- 개별 작품 오류는 기록만 하고 계속 진행 (다음 실행에서 다시 시도)
+- 결과 확인
+  - Actions 실행 화면 맨 위에 출처별 결과표
+  - 실행 첨부 파일 `logs-…`(90일 보관), R2의 `logs/날짜시각/`(계속 보관)
+    - `<단계>.log` 진행 기록, `<단계>.jsonl` 오류 상세(요청 주소·응답 코드·응답 앞부분·오류 위치), `<단계>.out` 출력 전체
+  - 저장소의 `status/last-run.md`에 마지막 결과
+- 실패하면 「수집 실패」 이슈가 자동으로 생기고(이미 열려 있으면 댓글 추가), GitHub 앱 푸시와 메일이 옵니다.
+- 막히는 출처가 있으면 집 컴퓨터를 실행 서버(self-hosted runner)로 등록해 그 단계만 옮길 수 있습니다.
+
+## 내 컴퓨터에서 직접 실행
+```sh
+pip install pykakasi pyarrow
+cd pipeline
+python3 run_all.py --budget-min 60              # 전부 (시간 예산 안에서)
+python3 run_all.py --only syoboi --force        # 한 단계만
+```
+
+## 출처
+manami-project/anime-offline-database (ODbL), AniDB 제목 덤프 (CC BY-NC-SA), Fribb/anime-lists, kawaiioverflow/arm, bangumi-data,
+AniList, 쇼보이 캘린더, 일본어 위키백과, Wikidata, AnimeThemes, TMDB, MusicBrainz, Anitabi, 나무위키 (CC BY-NC-SA). 비상업 개인 이용 전제입니다.

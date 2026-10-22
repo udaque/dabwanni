@@ -1,0 +1,9 @@
+pipeline/raw/
+pipeline/logs/
+pipeline/sources/
+pipeline/.r2/
+pipeline/__pycache__/
+site/data/detail/
+site/data/people/
+site/data/studios/
+site/data/nonjp.json

@@ -1,0 +1,132 @@
+name: 다봤니 데이터 갱신
+
+on:
+  schedule:
+    - cron: '30 18 * * *'          # 매일 한국 시간 새벽 3시 30분
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '일부 단계만 (쉼표로 구분, 비우면 전부) 예: syoboi,tmdb'
+        required: false
+        default: ''
+      force:
+        description: '주기와 상관없이 전부 다시 실행'
+        type: boolean
+        default: false
+      budget:
+        description: '수집에 쓸 최대 시간(분)'
+        default: '320'
+
+concurrency:
+  group: dabwanni-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write     # 실행 기록 커밋 (정기 실행이 60일 뒤 꺼지는 것 방지)
+  issues: write       # 실패 시 이슈 생성
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      NAMU_DUMP_URL: ${{ vars.NAMU_DUMP_URL }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 준비
+        run: |
+          pip install pykakasi pyarrow
+          sudo apt-get install -y zstd >/dev/null
+
+      - name: 수집 원본 복원 (R2)
+        if: env.R2_BUCKET != ''
+        run: pipeline/sync_r2.sh pull
+
+      - name: 수집 원본 복원 (R2가 없을 때 GitHub 캐시)
+        if: env.R2_BUCKET == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: pipeline/raw
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
+
+      - name: 나무위키 덤프 받기 (설정된 경우, 25일 주기)
+        if: env.NAMU_DUMP_URL != ''
+        run: |
+          mkdir -p /tmp/namu && curl -fsSL -o /tmp/namu/dump "$NAMU_DUMP_URL" || echo "나무위키 덤프를 받지 못했습니다"
+          case "$NAMU_DUMP_URL" in *.parquet) mv /tmp/namu/dump /tmp/namu/dump.parquet; echo "NAMU_DUMP=/tmp/namu/dump.parquet" >> $GITHUB_ENV;; *) mv /tmp/namu/dump /tmp/namu/dump.json; echo "NAMU_DUMP=/tmp/namu/dump.json" >> $GITHUB_ENV;; esac
+
+      - name: 수집과 병합
+        id: run
+        working-directory: pipeline
+        continue-on-error: true
+        run: |
+          python3 run_all.py --budget-min "${{ inputs.budget || '320' }}" --only "${{ inputs.only }}" ${{ inputs.force && '--force' || '' }}
+
+      - name: 수집 원본 보관 (R2)
+        if: always() && env.R2_BUCKET != ''
+        run: pipeline/sync_r2.sh push
+
+      - name: 수집 원본 보관 (GitHub 캐시)
+        if: always() && env.R2_BUCKET == ''
+        uses: actions/cache/save@v4
+        with:
+          path: pipeline/raw
+          key: raw-${{ github.run_id }}
+
+      - name: 로그 첨부
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_id }}
+          path: pipeline/logs
+          retention-days: 90
+
+      - name: 로그 보관 (R2)
+        if: always() && env.R2_BUCKET != ''
+        run: pipeline/sync_r2.sh logs || true
+
+      - name: 사이트 배포 (Cloudflare Pages)
+        if: always() && hashFiles('pipeline/logs/build.out') != '' && env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          grep -q "Traceback" pipeline/logs/build.out && { echo "병합이 실패해 배포하지 않습니다"; exit 1; }
+          P="${{ vars.CF_PAGES_PROJECT || 'dabwanni' }}"
+          npx --yes wrangler@3.114.0 pages project create "$P" --production-branch main 2>/dev/null || echo "Pages 프로젝트가 이미 있습니다"
+          npx --yes wrangler@3.114.0 pages deploy site --project-name "${{ vars.CF_PAGES_PROJECT || 'dabwanni' }}" --branch main --commit-dirty=true
+
+      - name: 실행 기록 커밋
+        if: always()
+        run: |
+          mkdir -p status
+          cp pipeline/logs/summary.md status/last-run.md 2>/dev/null || echo "요약 없음" > status/last-run.md
+          git config user.name "dabwanni-bot"
+          git config user.email "dabwanni-bot@users.noreply.github.com"
+          git add status/last-run.md
+          git commit -m "데이터 갱신 기록 $(date -u +%Y-%m-%d)" || echo "바뀐 것 없음"
+          git push || echo "기록 커밋 실패"
+
+      - name: 실패 알림 (이슈)
+        if: always() && (steps.run.outcome == 'failure' || failure())
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BODY="$(cat pipeline/logs/summary.md 2>/dev/null || echo '요약 파일이 없습니다. 실행 로그를 확인하세요.')
+
+          실행 기록: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh label create "수집 실패" --color B60205 2>/dev/null || true
+          OPEN=$(gh issue list --label "수집 실패" --state open --json number -q '.[0].number')
+          if [ -n "$OPEN" ]; then gh issue comment "$OPEN" --body "$BODY"
+          else gh issue create --title "데이터 갱신 실패 $(date -u +%Y-%m-%d)" --label "수집 실패" --body "$BODY"; fi
+          exit 1
