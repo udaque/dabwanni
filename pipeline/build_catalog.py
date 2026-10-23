@@ -78,12 +78,17 @@ for x in a:
 import unicodedata
 def nja(t):
     t = unicodedata.normalize('NFKC', t or '')
+    t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
     return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
 def nro(t):
     t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
     t = re.sub(r'[^a-z0-9]', '', t)
     t = t.replace('wo', 'o').replace('ou', 'o').replace('uu', 'u').replace('oo', 'o')
+    t = re.sub(r'(.)\1+', r'\1', t)                                   # Lilly / Lily 같은 겹글자 차이
     return t
+def nbare(t):
+    # 괄호 속 덧붙임(「(新アニメ化プロジェクト)」·「[マジックナイト]」 등)을 뺀 제목
+    return nja(re.sub(r'[\(（\[【][^\)）\]】]*[\)）\]】]', '', unicodedata.normalize('NFKC', t or '')))
 par = list(range(len(out)))
 def find(i):
     while par[i] != i: par[i] = par[par[i]]; i = par[i]
@@ -104,10 +109,16 @@ for i, r in enumerate(out):
     ty = r['ty'] if r['ty'] != 'X' else None
     for key in {nja(r['ja']), nro(r['r'])}:
         if len(key) >= 4: buckets[('t', key, r['y'])].append(i)
+    kb = nbare(r['ja'])
+    if len(kb) >= 4 and kb != nja(r['ja']) or (len(kb) >= 4 and not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append(i)
 for (kind, *rest), idx in buckets.items():
     for j in idx[1:]:
         a, b = out[idx[0]], out[j]
-        if kind == 't' and a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
+        if kind in ('t', 'tb') and a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
+        # 괄호를 뺀 제목으로만 같은 경우는, 한쪽이 AniList·MAL ID가 없는 보조 출처 항목일 때만 합침
+        if kind == 'tb' and (a['al'] or a['mal']) and (b['al'] or b['mal']): continue
+        # 연도를 모르거나, 둘 다 괄호 덧붙임이 있으면(서로 다른 판일 수 있음) 합치지 않음
+        if kind == 'tb' and (not a['y'] or not (nja(a['ja']) == rest[0] or nja(b['ja']) == rest[0])): continue
         union(idx[0], j)
 groups = collections.defaultdict(list)
 for i in range(len(out)): groups[find(i)].append(i)
