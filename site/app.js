@@ -89,6 +89,12 @@ function bind(){
   $('#prevQ').onclick = () => { if (--S.qq < 1) { S.qq = 4; S.y--; } S.shown = PAGE; render(); };
   $('#nextQ').onclick = () => { if (++S.qq > 4) { S.qq = 1; S.y++; } S.shown = PAGE; render(); };
   document.addEventListener('click', onClick);
+  document.addEventListener('pointerdown', holdStart);
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => document.addEventListener(t, holdStop));
+  document.addEventListener('contextmenu', e => { if (e.target.closest('.step')) e.preventDefault(); });
+  // 확대·축소 막기: 사파리는 viewport 설정을 무시하므로 손가락 모으기 동작 자체를 막음
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive: false}));
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, {passive: false});
   document.addEventListener('change', onChange);
   window.addEventListener('hashchange', route);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
@@ -113,9 +119,12 @@ function onClick(e){
   const el = e.target.closest('[data-act]');
   if (el) {
     const {act, k} = el.dataset;
-    if (act === 'w' || act === 'i') { const m = M(k); m[act] ? delete m[act] : (m[act] = 1); if (act === 'w' && m.w && !m.end) m.end = today(); save(); refresh(k); return; }
-    if (act === 'ep+') { setEp(k, (M(k).ep || 0) + 1); return; }
-    if (act === 'ep-') { setEp(k, (M(k).ep || 0) - 1); return; }
+    if (act === 'w' || act === 'i') {
+      const m = M(k); m[act] ? delete m[act] : (m[act] = 1);
+      if (act === 'w' && m.w) { const t = total(BYK.get(k)); if (t) m.ep = t; if (!m.start) m.start = today(); if (!m.end) m.end = today(); }
+      save(); refresh(k); return;
+    }
+    if ((act === 'ep+' || act === 'ep-') && e.detail === 0) { setEp(k, (M(k).ep || 0) + (act === 'ep+' ? 1 : -1)); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
     if (act === 'epset') { const n = +el.dataset.no, cur = M(k).ep || 0; setEp(k, cur >= n ? n - 1 : n); return; }
     if (act === 'rate') { const m = M(k), n = +el.dataset.n; m.rate = m.rate === n ? 0 : n; save(); refresh(k); return; }
     if (act === 're+' || act === 're-') { const m = M(k); m.re = Math.max(0, (m.re || 0) + (act === 're+' ? 1 : -1)); save(); refresh(k); return; }
@@ -127,6 +136,21 @@ function onClick(e){
   }
   if (e.target.closest('[data-close]')) closeSheet();
 }
+// + − 길게 누르기: 처음 0.4초 뒤부터 반복, 반복할수록 간격이 짧아짐 (최소 0.04초)
+let hold = null;
+function holdStart(e){
+  const b = e.target.closest('[data-act="ep+"],[data-act="ep-"]'); if (!b) return;
+  e.preventDefault();
+  const k = b.dataset.k, d = b.dataset.act === 'ep+' ? 1 : -1;
+  holdStop();
+  const step = () => setEp(k, (M(k).ep || 0) + d);
+  step();
+  let delay = 400, n = 0;
+  const tick = () => { step(); n++; delay = Math.max(40, 220 * Math.pow(0.85, n)); hold.t = setTimeout(tick, delay); };
+  hold = {b, t: setTimeout(tick, delay)};
+  b.setPointerCapture?.(e.pointerId);
+}
+function holdStop(){ if (hold) { clearTimeout(hold.t); hold = null; } }
 function onChange(e){
   const el = e.target.closest('[data-field]'); if (!el) return;
   const m = M(el.dataset.k); m[el.dataset.field] = el.value || undefined; if (!el.value) delete m[el.dataset.field]; save();

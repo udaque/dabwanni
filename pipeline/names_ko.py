@@ -1,5 +1,5 @@
 """사람·제작사·태그의 한국어 이름. 확인된 표기(사전·Wikidata·나무위키)가 없으면 음역하고 auto=True로 표시합니다."""
-import re
+import re, unicodedata
 from translit import romaji_to_hangul, kana_to_hangul, name_to_hangul, ja_to_hangul
 
 STUDIO_KO = {
@@ -97,6 +97,9 @@ def person_ko(native=None, first=None, last=None, overrides=None):
     key = re.sub(r'\s', '', native or ((last or '') + (first or '')))
     if overrides and key in overrides: return overrides[key], False
     if native and re.search(r'[\uac00-\ud7a3]', native): return native, False      # 한국인 성우 등은 원문이 한국어
+    if not (native and re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', native)) and (first or last):
+        # 일본어 표기가 없는 이름(영어 더빙 성우 등)은 서양식 순서 그대로, 로마자로 읽히는 낱말만 한글로 옮김
+        return latin_to_hangul(' '.join(x for x in (first, last) if x)), True
     if native and not re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', native) and not (first or last):
         return latin_to_hangul(native), True
     ko, how = name_to_hangul(native, first, last)
@@ -200,3 +203,28 @@ def place_ko(s):
 def date_ko(s):
     p = [x for x in (s or '').split('-') if x]
     return ''.join(f'{int(v)}{u} ' for v, u in zip(p, ('년', '월', '일'))).strip() if p else None
+
+
+def season_mark(ja, romaji=None):
+    """일본어·로마자 제목에서 시즌 표시를 찾아 한국어로 (예: 第2期 第2クール → 2기 2쿨). 없으면 None."""
+    t = unicodedata.normalize('NFKC', ja or ''); r = romaji or ''
+    def first(pats):
+        for src in (t, r):
+            for p, f in pats:
+                m = re.search(p, src)
+                if m and int(m.group(1)) >= 2: return f.format(int(m.group(1)))
+    ki = first([(r'第\s*(\d+)\s*期', '{}기'), (r'(\d+)\s*期', '{}기'), (r'(\d+)(?:st|nd|rd|th)\s*[Ss]eason', '{}기'),
+                (r'[Ss]eason\s*(\d+)', '{}기'), (r'第\s*(\d+)\s*シーズン', '{}기'), (r'\s(\d{1,2})$', '{}기')])
+    cour = first([(r'第\s*(\d+)\s*クール', '{}쿨'), (r'(\d+)\s*クール目', '{}쿨'), (r'[Pp]art\s*(\d+)', '파트 {}'), (r'[Cc]our\s*(\d+)', '{}쿨')])
+    bu = first([(r'第\s*(\d+)\s*部', '{}부')])
+    if not cour and re.search(r'(後編|後半)', t): cour = '2쿨'
+    marks = [x for x in (ki, bu, cour) if x]
+    if not marks and re.search(r'(完結編|最終章|ファイナルシーズン|[Ff]inal [Ss]eason)', t + ' ' + r): marks = ['파이널']
+    return ' '.join(marks) or None
+
+def add_season(ko, ja, romaji=None):
+    """한국어 제목에 시즌 표시가 없고 원제에는 있으면 덧붙임 (예: 정반대의 너와 나 + 2기)."""
+    if not ko: return ko
+    if re.search(r'(\d|기|시즌|쿨|부\b|파트|[Ss]eason|[Pp]art|파이널|완결)', ko): return ko
+    m = season_mark(ja, romaji)
+    return f'{ko} {m}' if m else ko

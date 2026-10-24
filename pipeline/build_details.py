@@ -6,7 +6,7 @@
 모든 사람·회사·캐릭터 이름에는 한국어 표기가 들어갑니다. 확인된 표기(나무위키·Wikidata·사전)가 없으면 음역하고 auto 표시를 붙입니다."""
 import os, re, json, shutil, glob
 from common import *
-from names_ko import station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
+from names_ko import add_season, station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
 from translit import kana_to_hangul, name_to_hangul
 
 COMPANY = re.compile(r'(スタジオ|Studio|STUDIO|作画部|アニメーション|プロダクション|株式会社|動画|工房|ピクチャーズ|フィルム|ワークス|Works|Pictures|Animation|\(株\))')
@@ -101,8 +101,9 @@ def main():
         for e in (d.get('staff') or {}).get('edges', []):
             n = e['node']['name']; romaji.setdefault(pname(n.get('native') or ''), (n.get('first'), n.get('last')))
         for e in (d.get('characters') or {}).get('edges', []):
-            for l in ('ja', 'ko', 'en'):
-                for v in e.get(l) or []: romaji.setdefault(pname(v['name'].get('native') or ''), (v['name'].get('first'), v['name'].get('last')))
+            for r in e.get('voiceActorRoles') or []:
+                v = r.get('voiceActor') or {}
+                if v.get('name'): romaji.setdefault(pname(v['name'].get('native') or ''), (v['name'].get('first'), v['name'].get('last')))
     romaji.pop('', None)
 
     def P(native, first=None, last=None, al_id=None):
@@ -139,7 +140,8 @@ def main():
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
         ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'))
-        if ko and not w.get('ko'): w['ko'] = ko
+        if ko: ko = add_season(ko, w.get('ja'), w.get('r'))
+        if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):
             for x in w.get('_stu_names') or []: studios[S(x)]['works'].append({'k': k, 'as': 'main'})
@@ -171,10 +173,14 @@ def main():
             c = {'name': NM.character(n.get('native'), n.get('full'), n.get('first'), n.get('last'), work_names), 'role': e['role'], 'cast': []}
             img = (e['node'].get('image') or {}).get('medium')
             if img and 'default' not in img: c['img'] = img
-            for lang in ('ja', 'ko', 'en'):
-                for v in e.get(lang) or []:
-                    vn = v['name']; i = P(vn.get('native') or vn.get('full'), vn.get('first'), vn.get('last'), v['id'])
-                    c['cast'].append({**ref(i), 'lang': lang})
+            LANG = {'Japanese': 'ja', 'Korean': 'ko', 'English': 'en'}
+            seen = set()
+            for r in e.get('voiceActorRoles') or []:
+                v = r.get('voiceActor') or {}; lang = LANG.get(v.get('languageV2'))
+                if not lang or (v.get('id'), lang) in seen: continue
+                seen.add((v.get('id'), lang))
+                vn = v['name']; i = P(vn.get('native') or vn.get('full'), vn.get('first'), vn.get('last'), v['id'])
+                c['cast'].append({**ref(i), 'lang': lang, **({'note': r['roleNotes']} if r.get('roleNotes') else {})})
             chars.append(c)
             for x in (n.get('native'), n.get('full')):
                 if x: byname[pname(x)] = c
@@ -302,7 +308,7 @@ def main():
     ki, si, ei = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'); n_ko = 0
     for r in c['rows']:
         w = BY[r[0]]
-        if not r[ki] and w.get('ko'): r[ki] = w['ko']; n_ko += 1
+        if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
     for s in c['studios']:
         if s[3] in studios and not studios[s[3]]['name'].get('auto'): s[1], s[2] = studios[s[3]]['name']['ko'], False

@@ -11,8 +11,8 @@ if __name__ == '__main__':
     for f in glob.glob(os.path.join(RAW, 'anilist', '*.json')):
         d = json.load(open(f, encoding='utf-8')) or {}
         for e in (d.get('characters') or {}).get('edges', []):
-            for l in ('ja', 'ko', 'en'):
-                for v in e.get(l) or []: ids.add(v['id'])
+            for r in e.get('voiceActorRoles') or []:
+                if r.get('voiceActor'): ids.add(r['voiceActor']['id'])
         for e in (d.get('staff') or {}).get('edges', []): ids.add(e['node']['id'])
     todo = sorted(i for i in ids if not have('anilist_people', str(i)))
     chunks = [todo[n:n + 50] for n in range(0, len(todo), 50)]

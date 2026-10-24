@@ -11,10 +11,9 @@ Q = '''query($id:Int,$page:Int){Media(id:$id,type:ANIME){id status episodes star
  relations{edges{relationType node{id type}}}
  characters(page:$page,perPage:25,sort:[ROLE,RELEVANCE,ID]){pageInfo{hasNextPage}
   edges{role node{id %s image{medium}}
-   ja:voiceActors(language:JAPANESE){id %s}
-   ko:voiceActors(language:KOREAN){id %s}
-   en:voiceActors(language:ENGLISH){id %s}}}
- staff(page:$page,perPage:25,sort:[RELEVANCE,ID]){pageInfo{hasNextPage} edges{role node{id %s}}}}}''' % ((NAME,) * 5)
+   voiceActorRoles(sort:[RELEVANCE,ID]){roleNotes dubGroup voiceActor{id languageV2 %s}}}}
+ staff(page:$page,perPage:25,sort:[RELEVANCE,ID]){pageInfo{hasNextPage} edges{role node{id %s}}}}}''' % ((NAME,) * 3)
+QV = 2   # 질의 형식 판. 바뀌면 이전 판으로 받은 작품을 모두 다시 받음
 URL = 'https://graphql.anilist.co'
 
 def query(http, al, page):
@@ -43,8 +42,11 @@ if __name__ == '__main__':
     W = sorted((w for w in load_catalog() if w['al']), key=lambda w: -(w['y'] or 0))
     def work(w, run):
         http.run = run
-        if not needs('anilist', w): return SKIP
-        r = fetch(http, w['al']) or {}; save('anilist', w['k'], r); return r
+        old = load('anilist', w['k'])
+        if old is not None and (old or {}).get('_qv') == QV and not needs('anilist', w): return SKIP
+        r = fetch(http, w['al']) or {}
+        if r: r['_qv'] = QV
+        save('anilist', w['k'], r); return r
     def canary():
         m = query(http, 1, 1); return bool(m and m['title'].get('native'))
     run_source('anilist', W, work,
