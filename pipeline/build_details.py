@@ -92,18 +92,21 @@ def main():
     for p in out.values(): shutil.rmtree(p, ignore_errors=True); os.makedirs(p)
     people, studios, prof = {}, {}, {}
     for f in glob.glob(os.path.join(RAW, 'anilist_people', '*.json')):
-        d = json.load(open(f, encoding='utf-8'))
-        if d: prof[d['id']] = d
+        try: d = json.load(open(f, encoding='utf-8'))
+        except Exception: continue
+        if isinstance(d, dict) and d.get('id'): prof[d['id']] = d          # 정보 없음으로 저장된 파일은 받은 시각(_at)만 있음
 
     romaji = {}
     for f in glob.glob(os.path.join(RAW, 'anilist', '*.json')):
-        d = json.load(open(f, encoding='utf-8')) or {}
-        for e in (d.get('staff') or {}).get('edges', []):
-            n = e['node']['name']; romaji.setdefault(pname(n.get('native') or ''), (n.get('first'), n.get('last')))
-        for e in (d.get('characters') or {}).get('edges', []):
-            for r in e.get('voiceActorRoles') or []:
-                v = r.get('voiceActor') or {}
-                if v.get('name'): romaji.setdefault(pname(v['name'].get('native') or ''), (v['name'].get('first'), v['name'].get('last')))
+        try:                                   # 파일 하나가 깨져도 읽기 준비 전체가 멈추지 않게
+            d = json.load(open(f, encoding='utf-8')) or {}
+            for e in (d.get('staff') or {}).get('edges', []):
+                n = e['node']['name']; romaji.setdefault(pname(n.get('native') or ''), (n.get('first'), n.get('last')))
+            for e in (d.get('characters') or {}).get('edges', []):
+                for r in e.get('voiceActorRoles') or []:
+                    v = r.get('voiceActor') or {}
+                    if v.get('name'): romaji.setdefault(pname(v['name'].get('native') or ''), (v['name'].get('first'), v['name'].get('last')))
+        except Exception as ex: print('읽기 건너뜀', os.path.basename(f), type(ex).__name__, ex)
     romaji.pop('', None)
 
     def P(native, first=None, last=None, al_id=None):
@@ -134,7 +137,9 @@ def main():
     def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'auto') if k in n}}
 
     made, nonjp, details = 0, {}, {}
-    for w in W:
+    errors = []
+    def one(w):
+        nonlocal made
         k = w['k']
         al, sy, at, tm, jw, mu, ab = (load(s, k) for s in ('anilist', 'syoboi', 'animethemes', 'tmdb', 'jawiki', 'music', 'anitabi'))
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
@@ -145,7 +150,7 @@ def main():
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):
             for x in w.get('_stu_names') or []: studios[S(x)]['works'].append({'k': k, 'as': 'main'})
-            continue
+            return
         d = {'k': k, 'titles': {x: v for x, v in {'ko': ko, 'ja': ((al or {}).get('title') or {}).get('native') or w.get('ja'),
                                                    'en': ((al or {}).get('title') or {}).get('english') or w.get('en')}.items() if v}}
         work_names = [x for x in (ko, w.get('ja')) if x]
@@ -291,6 +296,21 @@ def main():
                                'points': [{**p, 'name': {'ko': place_ko(p['name']), 'ja': p['name'], 'auto': 1}} for p in ab.get('points', [])]}
         d['sources'] = [n for n, x in zip(('AniList', 'しょぼいカレンダー', 'AnimeThemes', 'TMDB', '위키백과', 'MusicBrainz', 'Anitabi'), (al, sy, at, tm, jw, mu, ab)) if x]
         details[k] = d; made += 1
+    for w in W:
+        try: one(w)
+        except Exception as ex:
+            import traceback
+            errors.append({'k': w['k'], 'error': f'{type(ex).__name__}: {ex}', 'trace': traceback.format_exc()[-1500:]})
+    if errors:
+        print(f'병합 중 작품 {len(errors)}건 오류 (이 작품들만 빠지고 나머지는 계속 진행)')
+        for x in errors[:5]: print(' ', x['k'], x['error'])          # 전체 오류 위치는 logs/build.jsonl (배포 단계가 build.out의 'Traceback'으로 실패를 판단하므로 여기엔 찍지 않음)
+    logs = os.path.join(ROOT, 'logs'); os.makedirs(os.path.join(logs, 'summary'), exist_ok=True)
+    with open(os.path.join(logs, 'build.jsonl'), 'w', encoding='utf-8') as f:
+        for x in errors: f.write(json.dumps(x, ensure_ascii=False) + '\n')
+    json.dump({'source': 'build', 'status': 'ok', 'counts': {'ok': made, 'empty': 0, 'fail': len(errors), 'skip': 0},
+               'reason': f'작품 {len(errors)}건 병합 오류 (해당 작품만 제외)' if errors else '',
+               'examples': [f"{x['k']}: {x['error'][:160]}" for x in errors[:5]]},
+              open(os.path.join(logs, 'summary', 'build.json'), 'w', encoding='utf-8'), ensure_ascii=False)
 
     # Cloudflare Pages 파일 수 제한(2만 개)에 맞춰 묶음 파일로 저장. 묶음 번호 = FNV-1a(ID) % N (사이트 스크립트와 같은 계산)
     idx = {'people': {}, 'studios': {}}

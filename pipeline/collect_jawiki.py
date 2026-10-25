@@ -44,7 +44,7 @@ def parse_table(t):
             if cur is not None: rows.append(cur)
             cur = []; continue
         if line.startswith('|+'): continue
-        if line and line[0] in '|!':   # 빈 줄 제외 ('' in '|!'은 참이라 line[0]에서 오류가 났음)
+        if line[:1] in '|!':
             if cur is None: cur = []
             for c in split_cells(line, line[0]):
                 cur.append((line[0] == '!',) + parse_cell(c))
@@ -84,9 +84,10 @@ def episode_tables(wt):
             for k, (_, v) in zip(keys, row):
                 if k == 'air' and v: v = v.replace(chr(10), '')
                 if k and v: e[k] = v if k in ('no', 'title', 'air', 'note') else [x.strip() for x in re.split(r'[\n、,，・/]', v) if x.strip()]
-            no = re.sub(r'[^\d.]', '', e.get('no', ''))
-            if not no: continue
-            e['no'] = str(int(float(no))) if no.replace('.', '').isdigit() else no
+            m = re.search(r'\d+(?:\.\d+)?', e.get('no', ''))      # 「第2.5話」「総集編 2.5」 등에서 첫 숫자만
+            if not m: continue
+            no = m.group(0)
+            e['no'] = no if '.' in no else str(int(no))
             if isinstance(e.get('title'), str): e['title'] = e['title'].strip('「」')
             eps.append(e)
     return eps
