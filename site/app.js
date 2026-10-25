@@ -84,8 +84,13 @@ function bind(){
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
     render(); window.scrollTo(0, 0);
   });
-  let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(async () => { S.q = e.target.value.trim(); S.shown = PAGE; if (S.q) await loadIdx(); render(); }, 200); };
+  let t; $('#q').oninput = e => {
+    $('#qClear').hidden = !e.target.value;
+    clearTimeout(t); t = setTimeout(async () => { S.q = e.target.value.trim(); S.shown = PAGE; if (S.q) await loadIdx(); render(); }, 200);
+  };
+  $('#qClear').onclick = () => { clearTimeout(t); $('#q').value = ''; $('#qClear').hidden = true; S.q = ''; S.shown = PAGE; render(); $('#q').focus(); };
   $('#lang').onchange = e => { S.lang = e.target.value; store.set('lang', S.lang); setLogo(); render(); };
+  $('#qPick').onclick = () => openPicker();
   $('#prevQ').onclick = () => { if (--S.qq < 1) { S.qq = 4; S.y--; } S.shown = PAGE; render(); };
   $('#nextQ').onclick = () => { if (++S.qq > 4) { S.qq = 1; S.y++; } S.shown = PAGE; render(); };
   document.addEventListener('click', onClick);
@@ -151,6 +156,38 @@ function holdStart(e){
   b.setPointerCapture?.(e.pointerId);
 }
 function holdStop(){ if (hold) { clearTimeout(hold.t); hold = null; } }
+/* ---------- 연도·분기 고르기 ---------- */
+let pk = null;                      // {y: 고른 연도}
+function seasonCounts(){
+  const c = new Map();              // 연도 → [전체, 1분기, 2분기, 3분기, 4분기]
+  for (const w of W) { if (!w.y) continue; const a = c.get(w.y) || [0, 0, 0, 0, 0]; a[0]++; if (w.q) a[w.q]++; c.set(w.y, a); }
+  return c;
+}
+function openPicker(){
+  pk = {y: S.y, c: seasonCounts()};
+  $('#picker').hidden = false; document.body.style.overflow = 'hidden';
+  drawPicker(true);
+}
+function closePicker(){ $('#picker').hidden = true; if ($('#sheet').hidden) document.body.style.overflow = ''; pk = null; }
+function drawPicker(scroll){
+  const c = pk.c, a = c.get(pk.y) || [0, 0, 0, 0, 0];
+  $('#pkQ').innerHTML = [1, 2, 3, 4].map(q => `<button class="qb ${pk.y === S.y && q === S.qq ? 'on' : ''}" data-pq="${q}" ${a[q] ? '' : 'disabled'}><b>${QL[q]}</b><small>${QM[q]}</small><span class="pill">${fmtN(a[q])}</span></button>`).join('');
+  const years = [...c.keys()].sort((x, y) => y - x), dec = new Map();
+  years.forEach(y => { const d = Math.floor(y / 10) * 10; if (!dec.has(d)) dec.set(d, []); dec.get(d).push(y); });
+  $('#pkY').innerHTML = [...dec].map(([d, ys]) => `<div class="pkdec">${d}년대<span class="pill">${fmtN(ys.reduce((s, y) => s + c.get(y)[0], 0))}</span></div><div class="pkgrid">${
+    ys.map(y => `<button class="yb ${y === pk.y ? 'on' : ''}" data-py="${y}">${y}<span class="pill">${fmtN(c.get(y)[0])}</span></button>`).join('')}</div>`).join('');
+  if (scroll) { const b = $('#pkY').querySelector('.yb.on'); if (b) $('#pkY').scrollTop = b.offsetTop - $('#pkY').clientHeight / 2; }
+}
+document.addEventListener('click', e => {
+  if ($('#picker').hidden) return;
+  if (e.target.closest('[data-pclose]')) { closePicker(); return; }
+  const yb = e.target.closest('[data-py]');
+  if (yb) { pk.y = +yb.dataset.py; drawPicker(false); return; }
+  const qb = e.target.closest('[data-pq]');
+  if (qb && !qb.disabled) { S.y = pk.y; S.qq = +qb.dataset.pq; S.shown = PAGE; closePicker(); render(); window.scrollTo(0, 0); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#picker').hidden) closePicker(); });
+
 function onChange(e){
   const el = e.target.closest('[data-field]'); if (!el) return;
   const m = M(el.dataset.k); m[el.dataset.field] = el.value || undefined; if (!el.value) delete m[el.dataset.field]; save();

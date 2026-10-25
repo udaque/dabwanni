@@ -21,7 +21,7 @@
 </div>
 <header class="top">
   <div class="searchrow">
-    <input id="q" type="search" placeholder="작품·인물·제작사 검색" autocomplete="off" enterkeyhint="search">
+    <div class="qwrap"><input id="q" type="search" placeholder="작품·인물·제작사 검색" autocomplete="off" enterkeyhint="search"><button id="qClear" class="qclear" aria-label="검색어 지우기" hidden>✕</button></div>
     <select id="lang" aria-label="제목 표시 언어">
       <option value="ko">한국어</option><option value="ja">日本語</option><option value="en">English</option><option value="r">Romaji</option>
     </select>
@@ -38,7 +38,7 @@
 <main id="main">
   <section id="seasonBar" class="seasonbar">
     <button class="nav" id="prevQ" aria-label="이전 분기">‹</button>
-    <div class="seasontitle"><span id="qYear"></span><span id="qLabel"></span></div>
+    <button class="seasontitle" id="qPick" aria-haspopup="dialog" aria-label="연도와 분기 고르기"><span id="qYear"></span><span id="qLabel"></span></button>
     <button class="nav" id="nextQ" aria-label="다음 분기">›</button>
   </section>
   <div class="filters" id="filters"></div>
@@ -46,6 +46,14 @@
   <div id="more" class="more"></div>
 </main>
 
+<div id="picker" class="sheet" hidden>
+  <div class="sheetbg" data-pclose></div>
+  <div class="sheetbody picker" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
+    <div class="pkhead"><h2 id="pkTitle">연도·분기 고르기</h2><button class="close" data-pclose aria-label="닫기">✕</button></div>
+    <div class="pkq" id="pkQ"></div>
+    <div class="pkyears" id="pkY"></div>
+  </div>
+</div>
 <div id="sheet" class="sheet" hidden>
   <div class="sheetbg" data-close></div>
   <article class="sheetbody" id="sheetBody" tabindex="-1"></article>

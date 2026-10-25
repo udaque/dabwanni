@@ -38,7 +38,7 @@ button{cursor:pointer;white-space:nowrap}
 main{max-width:1100px;margin:0 auto;padding:16px}
 .seasonbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
 .seasonbar[hidden]{display:none}
-.seasontitle{display:flex;flex-direction:column;align-items:center;gap:0;font-family:"Zen Kaku Gothic New","IBM Plex Sans KR",sans-serif;white-space:nowrap;min-width:0}
+.seasontitle{border:0;background:none;padding:4px 14px;border-radius:14px;cursor:pointer;color:inherit;display:flex;flex-direction:column;align-items:center;gap:0;font-family:"Zen Kaku Gothic New","IBM Plex Sans KR",sans-serif;white-space:nowrap;min-width:0}
 #qYear{font-size:34px;line-height:1.15;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 #qLabel{font-size:17px;font-weight:700;color:var(--sub)}
 .nav{flex:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:24px;line-height:1}
@@ -141,3 +141,34 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 html{touch-action:manipulation}
 .step{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .prog{-webkit-user-select:none;user-select:none}
+
+/* 연도·분기 고르기 */
+.seasontitle:active{background:var(--chip)}
+.seasontitle #qLabel::after{content:"";display:inline-block;width:7px;height:7px;margin-left:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-4px) rotate(45deg)}
+.picker{display:flex;flex-direction:column;max-height:86dvh;padding:0 0 calc(12px + env(safe-area-inset-bottom,0px));overflow:hidden}
+@media(min-width:760px){.picker{max-height:80vh}}
+.pkhead{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 6px}
+.pkhead h2{margin:0;font:900 22px/1.3 "Zen Kaku Gothic New","IBM Plex Sans KR",sans-serif}
+.pkhead .close{position:static;float:none;margin:0}
+.pkq{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 16px 12px;border-bottom:1px solid var(--line)}
+.qb{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:9px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:4px;white-space:nowrap;min-width:0}
+.qb b{font-size:16px}
+.qb small{color:var(--sub);font-size:12px}
+.qb.on{background:var(--onair);border-color:var(--onair);color:#fff}
+.qb.on small,.qb.on .pill{color:#fff}
+.qb.on .pill{background:rgba(255,255,255,.22)}
+.qb:disabled{opacity:.4}
+.pkyears{overflow-y:auto;padding:4px 16px 8px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.pkdec{display:flex;align-items:center;gap:8px;margin:18px 0 10px;font:900 20px/1.3 "Zen Kaku Gothic New","IBM Plex Sans KR",sans-serif}
+.pkgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.yb{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 8px;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;min-width:0}
+.yb.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.yb.on .pill{background:color-mix(in srgb,var(--surface) 22%,transparent);color:inherit}
+
+/* 검색어 지우기 */
+.qwrap{position:relative;flex:1;min-width:0;display:flex}
+.qwrap input{width:100%;padding-right:44px}
+.qwrap input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}
+.qclear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:50%;background:none;color:var(--sub);font-size:16px;line-height:1;display:grid;place-items:center;padding:0}
+.qclear[hidden]{display:none}
+.qclear:active{background:var(--chip)}
