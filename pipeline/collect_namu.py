@@ -2,7 +2,7 @@
 나무위키 덤프(JSON 또는 Parquet, 열: title, text)를 직접 내려받아 경로를 지정하세요. 예:
   python3 collect_namu.py ~/namuwiki.parquet
 문서 앞부분의 괄호 속 일본어 표기(例: 種﨑敦美)를 그 문서 제목(한국어)과 연결한 색인을 만듭니다."""
-import sys, re, json, os
+import sys, re, json, os, glob
 from common import *
 
 JA = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
@@ -16,7 +16,33 @@ def plain(t):
     t = re.sub(r'\|\|', ' ', t)
     return re.sub(r'\s+', ' ', t).strip()
 
+HF_DATASET = os.environ.get('NAMU_DATASET', 'heegyu/namuwiki')   # 나무위키 2022-03-01 덤프 (title, text 열, 약 3GB)
+
+def download_dump(dest='/tmp/namu'):
+    """덤프 파일이 따로 없으면 Hugging Face에서 Parquet 파일들을 받아 그 폴더를 돌려줌."""
+    http = Http(0.2)
+    api = 'https://datasets-server.huggingface.co/parquet?dataset=' + urllib.parse.quote(HF_DATASET)
+    d = http.json(api)
+    files = [f for f in (d or {}).get('parquet_files', []) if f.get('split') == 'train']
+    if not files: raise SchemaError(f'{HF_DATASET} 의 Parquet 파일 목록이 비어 있음 (주소나 형식이 바뀌었을 가능성)')
+    os.makedirs(dest, exist_ok=True)
+    for f in files:
+        p = os.path.join(dest, f['filename'])
+        if os.path.exists(p) and os.path.getsize(p) == f.get('size'): continue
+        req = urllib.request.Request(f['url'], headers={'User-Agent': UA})
+        with urllib.request.urlopen(req, timeout=600) as r, open(p + '.tmp', 'wb') as o:
+            while True:
+                b = r.read(1 << 20)
+                if not b: break
+                o.write(b)
+        os.replace(p + '.tmp', p)
+    return dest
+
 def rows(path):
+    if os.path.isdir(path):                      # 여러 Parquet 파일이 든 폴더
+        for p in sorted(glob.glob(os.path.join(path, '**', '*.parquet'), recursive=True)):
+            yield from rows(p)
+        return
     if path.endswith('.parquet'):
         import pyarrow.parquet as pq
         for b in pq.ParquetFile(path).iter_batches(columns=['title', 'text'], batch_size=2000):
@@ -34,7 +60,11 @@ if __name__ == '__main__':
     path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('NAMU_DUMP')
     run = Run('namu', min_n=1)
     if not path or not os.path.exists(path):
-        run.say('나무위키 덤프 파일이 없어 건너뜁니다 (NAMU_DUMP 또는 인자로 경로 지정).'); run.status = 'skipped'; run.reason = '덤프 파일 없음'; run.finish(); sys.exit(0)
+        try:
+            run.say(f'덤프 파일 경로가 없어 Hugging Face({HF_DATASET})에서 받습니다.')
+            path = download_dump()
+        except Exception as e:
+            run._record_fail('덤프 받기', e); run.fail_source(f'덤프를 받지 못함: {type(e).__name__}: {e}'); run.finish(); sys.exit(2)
     index, kr = {}, {}
     try:
         for n, (title, text) in enumerate(rows(path)):
