@@ -18,11 +18,12 @@ STEPS = [
  ('anilist_people', ['python3', 'collect_anilist_people.py'], 0.10, 0),
  ('music',          ['python3', 'collect_extra.py', 'music'], 0.08, 0),
  ('anitabi',        ['python3', 'collect_extra.py', 'pilgrimage'], 0.05, 0),
+ ('laftel',         ['python3', 'collect_laftel.py'], 0.05, 0),
  ('namu',           ['python3', 'collect_namu.py'], 0.10, 25),
 ]
 # 깃허브 액션 서버에서는 막히는 출처: 집 PC에서 home_syoboi.sh(run_all.py --home)로 따로 돌림
 HOME_ONLY = {'syoboi'}
-BUDGETED = {'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi'}
+BUDGETED = {'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
 
 def last_ok(name):
     p = os.path.join(ROOT, 'raw', '_runs.json')

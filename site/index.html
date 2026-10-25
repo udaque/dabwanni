@@ -22,9 +22,6 @@
 <header class="top">
   <div class="searchrow">
     <div class="qwrap"><input id="q" type="search" placeholder="작품·인물·제작사 검색" autocomplete="off" enterkeyhint="search"><button id="qClear" class="qclear" aria-label="검색어 지우기" hidden>✕</button></div>
-    <select id="lang" aria-label="제목 표시 언어">
-      <option value="ko">한국어</option><option value="ja">日本語</option><option value="en">English</option><option value="r">Romaji</option>
-    </select>
   </div>
   <nav class="tabs" role="tablist">
     <button data-tab="season" class="on">분기별</button>
@@ -32,6 +29,8 @@
     <button data-tab="watching">보는 중</button>
     <button data-tab="watched">봤음</button>
     <button data-tab="want">관심</button>
+    <button data-tab="stats" class="tabset">통계</button>
+    <button data-tab="settings" class="tabset2">설정</button>
   </nav>
 </header>
 
@@ -44,6 +43,29 @@
   <div class="filters" id="filters"></div>
   <div id="list"></div>
   <div id="more" class="more"></div>
+  <section id="stats" class="stats" hidden></section>
+  <section id="settings" class="settings" hidden>
+    <div class="setsec">
+      <h2>제목 표시 언어</h2>
+      <div class="seg" id="setLang">
+        <button data-lang="ko">한국어</button><button data-lang="ja">日本語</button><button data-lang="en">English</button><button data-lang="r">Romaji</button>
+      </div>
+    </div>
+    <div class="setsec">
+      <h2>화면 모드</h2>
+      <div class="seg" id="setTheme">
+        <button data-theme-set="system">자동</button><button data-theme-set="light">라이트</button><button data-theme-set="dark">다크</button>
+      </div>
+    </div>
+    <div class="setsec">
+      <h2>시청 기록 백업</h2>
+      <p class="setnote">봤음·관심·본 회차·별점·메모는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 사파리 기록을 지우기 전에 파일로 내보내 두세요.</p>
+      <div class="setbtns">
+        <button id="exportBtn">파일로 내보내기</button>
+        <label class="filebtn">파일에서 불러오기<input id="importFile" type="file" accept="application/json" hidden></label>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div id="picker" class="sheet" hidden>
@@ -60,10 +82,6 @@
 </div>
 
 <footer class="foot">
-  <div class="footbtns">
-    <button id="exportBtn">체크 기록 내보내기</button>
-    <label class="filebtn">체크 기록 불러오기<input id="importFile" type="file" accept="application/json" hidden></label>
-  </div>
   <p>데이터 출처: AniList, AniDB, 쇼보이 캘린더, 위키백과, Wikidata, TMDB, AnimeThemes, MusicBrainz, Anitabi, 나무위키 등</p>
 </footer>
 <script src="app.js"></script>

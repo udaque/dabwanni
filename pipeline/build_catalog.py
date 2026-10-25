@@ -79,12 +79,18 @@ for x in a:
 import unicodedata
 def nja(t):
     t = unicodedata.normalize('NFKC', t or '')
+    t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
     return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
 def nro(t):
     t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
     t = re.sub(r'[^a-z0-9]', '', t)
     t = t.replace('wo', 'o').replace('ou', 'o').replace('uu', 'u').replace('oo', 'o')
+    t = re.sub(r'(.)\1+', r'\1', t)                                   # Lilly / Lily 같은 겹글자 차이
+    t = re.sub(r'(?:part|cour|cor)(\d)', r'pt\1', t)                         # 「Part 2」와 「Cour 2」는 같은 2쿨 (앞에서 ou→o로 바뀌어 cour는 cor가 됨)
     return t
+def nbare(t):
+    # 괄호 속 덧붙임(「(新アニメ化プロジェクト)」·「[マジックナイト]」 등)을 뺀 제목
+    return nja(re.sub(r'[\(（\[【][^\)）\]】]*[\)）\]】]', '', unicodedata.normalize('NFKC', t or '')))
 par = list(range(len(out)))
 def find(i):
     while par[i] != i: par[i] = par[par[i]]; i = par[i]
@@ -100,16 +106,41 @@ def union(a, b):
     if any(x in ka and x in kb and {v for k, v in ids[a] if k == x} != {v for k, v in ids[b] if k == x} for x in ('al', 'mal')): return
     lo, hi = min(a, b), max(a, b); par[hi] = lo; ids[lo] |= ids[hi]
 buckets = collections.defaultdict(list)
+CJK = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
+def keys(r):
+    ks = set()
+    j = nja(r['ja'])
+    if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: ks.add(('ja', j))            # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
+    for t in (r['r'], r.get('en')):
+        n = nro(t)
+        if len(n) >= 4: ks.add(('ro', n))
+    return ks
 for i, r in enumerate(out):
     if r['adb']: buckets[('adb', r['adb'])].append(i)
-    ty = r['ty'] if r['ty'] != 'X' else None
-    for key in {nja(r['ja']), nro(r['r'])}:
-        if len(key) >= 4: buckets[('t', key, r['y'])].append(i)
+    for key in keys(r): buckets[('t',) + key].append(i)
+    kb = nbare(r['ja'])
+    if len(kb) >= 4 and (kb != nja(r['ja']) or not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append(i)
+def compatible(a, b):
+    """같은 제목일 때 같은 작품으로 볼지: 형식이 같고(미분류는 예외), 연도 차이 1년 이내(한쪽이 미상이면 허용).
+    출처마다 방영 시기를 다르게 적는 경우(예: 한 곳은 봄, 한 곳은 여름)가 있어 분기는 보지 않음."""
+    if a['y'] and b['y'] and abs(a['y'] - b['y']) > 1: return False
+    if a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']):
+        # 형식이 달라도, 한쪽이 ID 없는 약한 출처(ANN 등)뿐이고 연도가 둘 다 있으면 같은 작품으로 봄 (약한 출처는 형식을 자주 다르게 적음)
+        weak = lambda r: not (r['al'] or r['mal'] or r['adb'])
+        return (weak(a) or weak(b)) and bool(a['y'] and b['y'])
+    return True
 for (kind, *rest), idx in buckets.items():
-    for j in idx[1:]:
-        a, b = out[idx[0]], out[j]
-        if kind == 't' and a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
-        union(idx[0], j)
+    for x in range(len(idx)):
+        for y_ in range(x + 1, len(idx)):
+            a, b = out[idx[x]], out[idx[y_]]
+            if kind == 't' and not compatible(a, b): continue
+            if kind == 'tb':
+                # 괄호를 뺀 제목으로만 같은 경우: 형식이 같고, 한쪽이 AniList·MAL ID가 없는 보조 출처 항목이고,
+                # 연도를 알고, 둘 중 하나는 괄호 덧붙임이 없을 때만 합침 (둘 다 괄호가 있으면 다른 판일 수 있음)
+                if a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
+                if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue
+                if not a['y'] or not (nja(a['ja']) == rest[0] or nja(b['ja']) == rest[0]): continue
+            union(idx[x], idx[y_])
 groups = collections.defaultdict(list)
 for i in range(len(out)): groups[find(i)].append(i)
 def rank(r): return (bool(r['al']), bool(r['mal']), bool(r['adb']), r['p'][:1] in ('M', 'A'))
@@ -147,3 +178,4 @@ print(len(out),dropped)
 print(collections.Counter(bool(r['ko']) for r in out),collections.Counter(bool(r['ja']) for r in out))
 print(collections.Counter((r['y']//10*10 if r['y'] else None) for r in out))
 json.dump(out,open('catalog_full.json','w'),ensure_ascii=False)
+json.dump(alias,open('catalog_aliases.json','w'))   # 합쳐져 사라진 작품 번호 → 남은 작품 번호 (사이트가 예전 체크 기록을 옮길 때 씀)

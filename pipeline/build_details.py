@@ -4,7 +4,7 @@
 - site/data/studios/<회사>.json  제작사 (+ index.json)
 - site/data/catalog.json         한국어 제목·제작사 한국어명을 보강해 다시 저장
 모든 사람·회사·캐릭터 이름에는 한국어 표기가 들어갑니다. 확인된 표기(나무위키·Wikidata·사전)가 없으면 음역하고 auto 표시를 붙입니다."""
-import os, re, json, shutil, glob
+import os, re, json, shutil, glob, unicodedata
 from common import *
 from names_ko import add_season, station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
 from translit import kana_to_hangul, name_to_hangul
@@ -79,6 +79,86 @@ def expand_eps(r):
         elif part.isdigit(): o.append(part)
     return o
 
+def parse_air(seq):
+    """위키 회차 표의 방영일 문자열들 → (년, 월) 목록. 「2025年1月10日」 뒤로 「1月17日」처럼 연도가 빠지면 앞 연도를 이어 씀."""
+    out, yr = [], None
+    for a in seq:
+        m = re.search(r'(?:(\d{4})\s*年)?\s*(\d{1,2})\s*月', a or '')
+        if not m: out.append(None); continue
+        if m.group(1): yr = int(m.group(1))
+        out.append((yr, int(m.group(2))) if yr else None)
+    return out
+
+def episode_offset(w, E, sy_eps, jw_eps, rels, BY):
+    """이어서 세는 시즌의 앞쪽 회차 수(오프셋). 0이면 1화부터, None이면 알 수 없음(위키 회차는 쓰지 않음)."""
+    nums = lambda L: sorted(int(e['no']) for e in L if str(e.get('no', '')).isdigit())
+    sn, jn = nums(sy_eps), nums(jw_eps)
+    if not E: return 0
+    # 1) 쇼보이 캘린더는 시즌마다 따로라, 번호가 화수보다 크면 그 첫 번호가 곧 시작점
+    if sn and sn[-1] > E: return sn[0] - 1
+    if not jn or jn[-1] <= E: return 0
+    # 2) 위키 문서가 여러 시즌을 담은 경우: 방영 시작 분기에 나간 회차부터
+    if w.get('y') and w.get('q'):
+        start = (w['y'], (w['q'] - 1) * 3 + 1)
+        dated = [(int(e['no']), d) for e, d in zip(jw_eps, parse_air([e.get('air') for e in jw_eps])) if d and str(e.get('no', '')).isdigit()]
+        cand = [n for n, d in dated if start <= d < (start[0] + (start[1] + 5) // 12, (start[1] + 5) % 12 + 1)]
+        if cand: return min(cand) - 1
+    # 3) AniList의 이전 시즌들 화수를 더함
+    total, seen, cur = 0, set(), rels or []
+    while True:
+        pre = [r['k'] for r in cur if r.get('type') == 'PREQUEL' and r['k'] in BY and r['k'] not in seen]
+        if not pre: break
+        p = pre[0]; seen.add(p); pw = BY[p]
+        if pw.get('ty') in ('T', 'O') and pw.get('e'): total += pw['e']
+        cur = (load('anilist', p) or {}).get('relations', {}).get('edges', [])
+        cur = [{'k': 'a' + str(x['node']['id']), 'type': x['relationType']} for x in cur]
+    if total and jn[-1] >= total + 1 and any(total < n <= total + E for n in jn): return total
+    return None
+
+LAF_VARIANT = re.compile(r'\s*[\(（\[]?\s*(자막|더빙|무삭제|우리말\s*더빙|한국어\s*더빙)\s*[\)）\]]?\s*$')
+
+def nko(t):
+    """한국어 제목 비교용: 띄어쓰기·기호 제거, 시즌 표기 통일(2기·시즌 2·2nd season → 2기), 끝의 (자막)·(더빙)·(무삭제) 표기 제거"""
+    t = unicodedata.normalize('NFKC', t or '').lower()
+    for _ in range(2): t = LAF_VARIANT.sub('', t)
+    t = re.sub(r'(?:시즌|season)\s*(\d+)', r'\1기', t)
+    t = re.sub(r'(\d+)(?:st|nd|rd|th)\s*season', r'\1기', t)
+    return re.sub(r'[\s\-_:;!?！？・·.,~〜()（）\[\]「」『』<>《》【】\'"“”‘’]', '', t)
+
+def laftel_kind(it):
+    """라프텔 항목의 판 구분: 더빙 / 무삭제 / 자막(기본)"""
+    n = it.get('name') or ''
+    if it.get('is_dubbed') or re.search(r'더빙', n): return '더빙'
+    if it.get('is_uncensored') or re.search(r'무삭제', n): return '무삭제'
+    return '자막'
+
+def laftel_index():
+    """raw/laftel/<연도-분기>.json → {(연도, 분기): [(정규화한 제목, 항목)]}. 판권 만료·시청 불가 항목은 뺌."""
+    idx = {}
+    for f in glob.glob(os.path.join(RAW, 'laftel', '*.json')):
+        try:
+            d = json.load(open(f, encoding='utf-8')); y, q = map(int, os.path.basename(f)[:-5].split('-'))
+        except Exception: continue
+        idx[(y, q)] = [(nko(it.get('name')), it) for it in d.get('items', [])
+                       if it.get('id') and it.get('name') and not it.get('is_expired') and it.get('is_viewing') is not False]
+    return idx
+
+def laftel_match(w, idx):
+    """같은 분기(앞뒤 한 분기 포함)에 한국어 제목이 같은 라프텔 항목들을 판별로 모음: [(판, 번호)].
+    자막판·더빙판·무삭제판이 따로 있으면 모두 돌려줌. 같은 판이 둘 이상이면 어느 것인지 애매해 그 판은 뺌."""
+    if not idx or not w.get('ko') or not w.get('y'): return []
+    name = nko(w['ko'])
+    qs = [(w['y'], q) for q in (1, 2, 3, 4)]
+    if w.get('q'):
+        n = w['y'] * 4 + w['q'] - 1
+        qs = [(w['y'], w['q']), ((n - 1) // 4, (n - 1) % 4 + 1), ((n + 1) // 4, (n + 1) % 4 + 1)]
+    by = {}
+    for k in qs:
+        for t, it in idx.get(k, []):
+            if t == name: by.setdefault(laftel_kind(it), {})[it['id']] = it
+    order = {'자막': 0, '더빙': 1, '무삭제': 2}
+    return [(kind, next(iter(ids))) for kind, ids in sorted(by.items(), key=lambda x: order[x[0]]) if len(ids) == 1]
+
 VOD = {'danime': 'dアニメストア', 'unext': 'U-NEXT', 'abema': 'ABEMA', 'netflix': 'Netflix', 'prime': 'Prime Video', 'nicovideo': 'ニコニコ',
        'disneyplus': 'Disney+', 'youtube': 'YouTube', 'crunchyroll': 'Crunchyroll'}
 from names_ko import STATION_KO
@@ -136,6 +216,7 @@ def main():
         return sid
     def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'auto') if k in n}}
 
+    LAF = laftel_index()
     made, nonjp, details = 0, {}, {}
     errors = []
     def one(w):
@@ -200,6 +281,7 @@ def main():
                 people[v['pid']]['roles'].append({'k': k, 'char': c['name'], 'role': c.get('role'), 'lang': v['lang']})
         if chars: d['characters'] = chars
 
+        al_ep_recs = []      # AniList 회차 표기가 붙은 인물 기록 (이어 세는 시즌이면 나중에 화면 번호로 바꿈)
         # 스태프 (작품 전체 + 회차별)
         staff, ep_staff = {}, {}
         for e in ((al or {}).get('staff') or {}).get('edges', []):
@@ -208,7 +290,8 @@ def main():
             if eps:
                 for no in eps: ep_staff.setdefault(no, {}).setdefault(r, set()).add(i)
             elif i not in staff.get(r, []): staff.setdefault(r, []).append(i)
-            people[i]['staff'].append({'k': k, 'role': r, 'eps': eps})
+            rec = {'k': k, 'role': r, 'eps': eps}; people[i]['staff'].append(rec)
+            if eps: al_ep_recs.append(rec)
         for s in (sy or {}).get('staff', []):
             r = role_ko(s['role'])
             if r in ('애니메이션 제작', '제작', '제작위원회'): continue
@@ -228,25 +311,48 @@ def main():
             if s['role'] in ('アニメーション制作', '制作'): main.append(S(s['name']))
             if s['role'] == '製作': committee.append(S(s['name']))
 
-        # 회차
+        # 회차 — 시즌을 이어서 세는 작품(예: 약사의 혼잣말 3기는 49~60화) 처리
+        #   no: 화면에 보이는 회차 번호(이어 센 번호), i: 이 작품 안에서의 순서(1부터). 시청 기록은 i로 저장.
+        E = w.get('e') or 0
+        O = episode_offset(w, E, (sy or {}).get('episodes', []), (jw or {}).get('episodes', []), d.get('relations'), BY)      # d['relations']: [{'k','type'}] 꼴
+        if O: d['ep_offset'] = O
+        def disp(n_local): return str(O + n_local)
+        def from_src(no, local):
+            """출처 번호를 화면 번호로. local=True면 그 출처가 시즌 안에서 1부터 센 번호."""
+            if not str(no).isdigit(): return str(no)
+            n = int(no)
+            return disp(n) if (local and O) else str(n)
+        def in_range(no):
+            return not (E and O is not None and str(no).isdigit() and not (O < int(no) <= O + E))
+        # 여기까지 ep_staff에는 AniList 스태프의 「(eps 1-3)」 표기만 들어 있음: 시즌 안 번호로 보고 화면 번호로 옮김
+        if O: ep_staff = {(disp(int(no)) if no.isdigit() else no): v for no, v in ep_staff.items()}
+        if O:
+            for rec in al_ep_recs: rec['eps'] = [disp(int(x)) if x.isdigit() else x for x in rec['eps']]
+        sy_local = bool(E) and all(int(x['no']) <= E for x in (sy or {}).get('episodes', []) if x['no'].isdigit())
         eps = {}
-        for e in (tm or {}).get('episodes', []): eps[e['no']] = {**e, 'title': dict(e.get('title') or {})}
+        for e in (tm or {}).get('episodes', []):
+            no = from_src(e['no'], True); eps[no] = {**e, 'no': no, 'title': dict(e.get('title') or {})}
         for e in (sy or {}).get('episodes', []):
-            x = eps.setdefault(e['no'], {'no': e['no'], 'title': {}})
+            no = from_src(e['no'], sy_local)
+            if not in_range(no): continue
+            x = eps.setdefault(no, {'no': no, 'title': {}})
             x['title'].setdefault('ja', e['title']['ja'])
             if e.get('endcard'):
-                i = P(e['endcard']); x['endcard'] = ref(i); people[i]['staff'].append({'k': k, 'role': '엔드카드', 'eps': [e['no']]})
-        for e in (jw or {}).get('episodes', []):
-            x = eps.setdefault(e['no'], {'no': e['no'], 'title': {}})
+                i = P(e['endcard']); x['endcard'] = ref(i); people[i]['staff'].append({'k': k, 'role': '엔드카드', 'eps': [no]})
+        jw_ok = O is not None
+        for e in (jw or {}).get('episodes', []) if jw_ok else []:
+            no = e['no']
+            if not in_range(no): continue                      # 위키 문서가 시리즈 전체 회차를 담고 있으면 이 시즌 것만
+            x = eps.setdefault(no, {'no': no, 'title': {}})
             if e.get('title'): x['title'].setdefault('ja', e['title'])
             if e.get('air') and not x.get('air'): x['air'] = e['air']
             for f, r in JWROLE.items():
                 for n in e.get(f, []):
-                    if COMPANY.search(n): coop.setdefault(S(re.sub(r'作画部$', '', n)), set()).add(e['no'])
+                    if COMPANY.search(n): coop.setdefault(S(re.sub(r'作画部$', '', n)), set()).add(no)
                     else:
-                        i = P(n); ep_staff.setdefault(e['no'], {}).setdefault(r, set()).add(i)
-                        people[i]['staff'].append({'k': k, 'role': r, 'eps': [e['no']]})
-            for n in e.get('studio', []): coop.setdefault(S(n), set()).add(e['no'])
+                        i = P(n); ep_staff.setdefault(no, {}).setdefault(r, set()).add(i)
+                        people[i]['staff'].append({'k': k, 'role': r, 'eps': [no]})
+            for n in e.get('studio', []): coop.setdefault(S(n), set()).add(no)
         for no, roles in ep_staff.items():
             x = eps.setdefault(no, {'no': no, 'title': {}})
             x['staff'] = [{'role': r, 'people': [ref(i) for i in ids]} for r, ids in sorted(roles.items(), key=lambda t: order.get(t[0], 999))]
@@ -261,10 +367,14 @@ def main():
                 c.update(ref(P(c['name']))); by.setdefault(c['pid'], []).append(c['role'])
             for i, roles in by.items(): people[i]['songs'].append({'k': k, 'kind': s['kind'], 'title': s['title'], 'roles': roles})
             for no in expand_eps(s.get('eps')):
+                no = from_src(no, sy_local)
+                if not in_range(no): continue
                 eps.setdefault(no, {'no': no, 'title': {}}).setdefault('songs', []).append({'kind': s['kind'], 'title': s['title']})
         if songs: d['songs'] = songs
         if eps:
             L = sorted(eps.values(), key=lambda e: (0, int(e['no'])) if e['no'].isdigit() else (1, e['no']))
+            for e in L:
+                if e['no'].isdigit(): e['i'] = int(e['no']) - (O or 0)
             use = {}
             for e in L:
                 for s in e.get('songs', []): use[(s['kind'], s['title'])] = use.get((s['kind'], s['title']), 0) + 1
@@ -288,6 +398,11 @@ def main():
             for v in ((w.get('vod') or {}).get(c) or []):
                 if not any(p['name'] == VOD[v] for p in ott.setdefault(c, [])): ott[c].append({'name': VOD[v]})
         for c in ott: ott[c] = [{'name': station_ko(p['name']) if p['name'] in STATION_KO_KEYS else p['name']} for p in ott[c]]
+        lf = laftel_match(w, LAF)
+        if lf:
+            kr = [p for p in ott.get('KR', []) if 'laftel' not in str(p.get('name')).lower() and '라프텔' not in str(p.get('name'))]
+            many = len(lf) > 1          # 판이 하나뿐이면 그냥 「라프텔」, 여럿이면 「라프텔 (자막)」·「라프텔 (더빙)」
+            ott['KR'] = [{'name': f'라프텔 ({kind})' if many else '라프텔', 'url': f'https://laftel.net/item/{lid}'} for kind, lid in lf] + kr
         if any(ott.values()): d['ott'] = ott; d['ott_updated'] = (tm or {}).get('ott_updated')
         if (jw or {}).get('box_office'): d['box_office'] = jw['box_office']
         if (mu or {}).get('albums'): d['albums'] = mu['albums']

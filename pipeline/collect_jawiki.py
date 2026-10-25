@@ -44,7 +44,7 @@ def parse_table(t):
             if cur is not None: rows.append(cur)
             cur = []; continue
         if line.startswith('|+'): continue
-        if line[:1] in '|!':
+        if line and line[0] in '|!':                    # 빈 줄은 건너뜀 ('' in '|!' 는 참이라 line[0]에서 오류가 났음)
             if cur is None: cur = []
             for c in split_cells(line, line[0]):
                 cur.append((line[0] == '!',) + parse_cell(c))

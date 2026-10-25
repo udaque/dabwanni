@@ -171,7 +171,10 @@ STATION_KO = {'NHK総合': 'NHK 종합', 'NHK Eテレ': 'NHK E테레', 'NHK教�
  'BSフジ': 'BS 후지', 'BS朝日': 'BS 아사히', 'BS-TBS': 'BS-TBS', 'BSテレ東': 'BS 테레토', 'BSジャパン': 'BS 재팬', 'AT-X': 'AT-X', 'アニマックス': '애니맥스',
  'キッズステーション': '키즈 스테이션', 'WOWOW': 'WOWOW', 'WOWOWプライム': 'WOWOW 프라임', 'カートゥーン ネットワーク': '카툰 네트워크', 'ディズニー・チャンネル': '디즈니 채널',
  'ニコニコ生放送': '니코니코 생방송', 'ABEMA': 'ABEMA', 'dアニメストア': 'd애니메 스토어', 'U-NEXT': 'U-NEXT', 'Netflix': '넷플릭스', 'Prime Video': '프라임 비디오',
- 'Disney+': '디즈니+', 'ニコニコ': '니코니코', 'YouTube': '유튜브', 'Crunchyroll': '크런치롤', 'Hulu': '훌루', 'FOD': 'FOD', 'Lemino': '레미노', 'DMM TV': 'DMM TV'}
+ 'Disney+': '디즈니+', 'ニコニコ': '니코니코', 'YouTube': '유튜브', 'Crunchyroll': '크런치롤', 'Hulu': '훌루', 'FOD': 'FOD', 'Lemino': '레미노', 'DMM TV': 'DMM TV',
+ # TMDB(JustWatch)가 쓰는 서비스 이름
+ 'Amazon Prime Video': '프라임 비디오', 'Disney Plus': '디즈니+', 'wavve': '웨이브', 'Watcha': '왓챠', 'TVING': '티빙', 'Coupang Play': '쿠팡플레이',
+ 'Apple TV Plus': '애플 TV+', 'Apple TV+': '애플 TV+', 'Laftel': '라프텔', 'Crunchyroll Amazon Channel': '크런치롤', 'Netflix basic with Ads': '넷플릭스(광고형)'}
 def station_ko(n): return {'ko': STATION_KO.get(n) or ja_company(n), 'ja': n} if STATION_KO.get(n) else {'ko': ja_company(n) if re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', n) else n, 'ja': n, 'auto': 1}
 
 JOB_KO = {'Voice Actor': '성우', 'Voice Actress': '성우', 'Actor': '배우', 'Actress': '배우', 'Director': '감독', 'Animator': '애니메이터', 'Musician': '음악가',
