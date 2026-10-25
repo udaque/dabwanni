@@ -21,24 +21,24 @@
 </div>
 <header class="top">
   <div class="searchrow">
-    <div class="qwrap"><input id="q" type="search" placeholder="작품·인물·제작사 검색" autocomplete="off" enterkeyhint="search"><button id="qClear" class="qclear" aria-label="검색어 지우기" hidden>✕</button></div>
+    <div class="qwrap"><input id="q" type="search" placeholder="작품·인물·제작사 검색" data-i18n-ph="작품·인물·제작사 검색" autocomplete="off" enterkeyhint="search"><button id="qClear" class="qclear" aria-label="검색어 지우기" data-i18n-aria="검색어 지우기" hidden>✕</button></div>
   </div>
   <nav class="tabs" role="tablist">
-    <button data-tab="season" class="on">분기별</button>
-    <button data-tab="all">전체</button>
-    <button data-tab="watching">보는 중</button>
-    <button data-tab="watched">봤음</button>
-    <button data-tab="want">관심</button>
-    <button data-tab="stats" class="tabset">통계</button>
-    <button data-tab="settings" class="tabset2">설정</button>
+    <button data-i18n="탭:분기별" data-tab="season" class="on">분기별</button>
+    <button data-i18n="탭:전체" data-tab="all">전체</button>
+    <button data-i18n="탭:보는 중" data-tab="watching">보는 중</button>
+    <button data-i18n="탭:봤음" data-tab="watched">봤음</button>
+    <button data-i18n="탭:관심" data-tab="want">관심</button>
+    <button data-i18n="탭:통계" data-tab="stats" class="tabset">통계</button>
+    <button data-i18n="탭:설정" data-tab="settings" class="tabset2">설정</button>
   </nav>
 </header>
 
 <main id="main">
   <section id="seasonBar" class="seasonbar">
-    <button class="nav" id="prevQ" aria-label="이전 분기">‹</button>
-    <button class="seasontitle" id="qPick" aria-haspopup="dialog" aria-label="연도와 분기 고르기"><span id="qYear"></span><span id="qLabel"></span></button>
-    <button class="nav" id="nextQ" aria-label="다음 분기">›</button>
+    <button class="nav" id="prevQ" aria-label="이전 분기" data-i18n-aria="이전 분기">‹</button>
+    <button class="seasontitle" id="qPick" aria-haspopup="dialog" aria-label="연도와 분기 고르기" data-i18n-aria="연도와 분기 고르기"><span id="qYear"></span><span id="qLabel"></span></button>
+    <button class="nav" id="nextQ" aria-label="다음 분기" data-i18n-aria="다음 분기">›</button>
   </section>
   <div class="filters" id="filters"></div>
   <div id="list"></div>
@@ -46,23 +46,23 @@
   <section id="stats" class="stats" hidden></section>
   <section id="settings" class="settings" hidden>
     <div class="setsec">
-      <h2>제목 표시 언어</h2>
+      <h2 data-i18n="언어">언어</h2>
       <div class="seg" id="setLang">
-        <button data-lang="ko">한국어</button><button data-lang="ja">日本語</button><button data-lang="en">English</button><button data-lang="r">Romaji</button>
+        <button data-lang="ko">한국어</button><button data-lang="ja">日本語</button><button data-lang="en">English</button>
       </div>
     </div>
     <div class="setsec">
-      <h2>화면 모드</h2>
+      <h2 data-i18n="화면 모드">화면 모드</h2>
       <div class="seg" id="setTheme">
-        <button data-theme-set="system">자동</button><button data-theme-set="light">라이트</button><button data-theme-set="dark">다크</button>
+        <button data-theme-set="system" data-i18n="자동">자동</button><button data-theme-set="light" data-i18n="라이트">라이트</button><button data-theme-set="dark" data-i18n="다크">다크</button>
       </div>
     </div>
     <div class="setsec">
-      <h2>시청 기록 백업</h2>
-      <p class="setnote">봤음·관심·본 회차·별점·메모는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 사파리 기록을 지우기 전에 파일로 내보내 두세요.</p>
+      <h2 data-i18n="시청 기록 백업">시청 기록 백업</h2>
+      <p class="setnote" data-i18n="봤음·관심·본 회차·별점·메모는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 사파리 기록을 지우기 전에 파일로 내보내 두세요.">봤음·관심·본 회차·별점·메모는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 사파리 기록을 지우기 전에 파일로 내보내 두세요.</p>
       <div class="setbtns">
-        <button id="exportBtn">파일로 내보내기</button>
-        <label class="filebtn">파일에서 불러오기<input id="importFile" type="file" accept="application/json" hidden></label>
+        <button id="exportBtn" data-i18n="파일로 내보내기">파일로 내보내기</button>
+        <label class="filebtn"><span data-i18n="파일에서 불러오기">파일에서 불러오기</span><input id="importFile" type="file" accept="application/json" hidden></label>
       </div>
     </div>
   </section>
@@ -71,7 +71,7 @@
 <div id="picker" class="sheet" hidden>
   <div class="sheetbg" data-pclose></div>
   <div class="sheetbody picker" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
-    <div class="pkhead"><h2 id="pkTitle">연도·분기 고르기</h2><button class="close" data-pclose aria-label="닫기">✕</button></div>
+    <div class="pkhead"><h2 id="pkTitle" data-i18n="연도·분기 고르기">연도·분기 고르기</h2><button class="close" data-pclose aria-label="닫기" data-i18n-aria="닫기">✕</button></div>
     <div class="pkq" id="pkQ"></div>
     <div class="pkyears" id="pkY"></div>
   </div>
@@ -82,8 +82,9 @@
 </div>
 
 <footer class="foot">
-  <p>데이터 출처: AniList, AniDB, 쇼보이 캘린더, 위키백과, Wikidata, TMDB, AnimeThemes, MusicBrainz, Anitabi, 나무위키 등</p>
+  <p><span data-i18n="데이터 출처">데이터 출처</span>: AniList, AniDB, <span data-i18n="쇼보이 캘린더">쇼보이 캘린더</span>, Wikipedia, Wikidata, TMDB, AnimeThemes, MusicBrainz, Anitabi, <span data-i18n="나무위키">나무위키</span>, Laftel</p>
 </footer>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -200,12 +200,15 @@ def main():
             b = pr.get('dateOfBirth') or {}
             pf = {'birth': date_ko('-'.join(str(x) for x in (b.get('year'), b.get('month'), b.get('day')) if x) or (wd.get('birth') or '')[:10]),
                   'hometown': place_ko(pr.get('homeTown')), 'jobs': [JOB_KO.get(j, j) for j in pr.get('primaryOccupations') or []] or None,
+                  # 일본어·영어 화면용 원래 값 (생일은 YYYY-MM-DD, 출신지는 AniList 원문)
+                  'birth_iso': '-'.join(f'{x:02d}' if i else str(x) for i, x in enumerate((b.get('year'), b.get('month'), b.get('day'))) if x) or (wd.get('birth') or '')[:10] or None,
+                  'hometown_raw': pr.get('homeTown') or None,
                   'image': (pr.get('image') or {}).get('medium'),
-                  'years': pr.get('yearsActive') or None, 'agency': wd.get('agko') or wd.get('agja')}
+                  'years': pr.get('yearsActive') or None, 'agency': wd.get('agko') or wd.get('agja'), 'agency_ja': wd.get('agja') or None}
             pf = {k: v for k, v in pf.items() if v}
             if pf: people[i]['profile'] = pf
         return i
-    def ref(i): n = people[i]['name']; return {'pid': i, **{k: n[k] for k in ('ko', 'ja', 'auto') if k in n}}
+    def ref(i): n = people[i]['name']; return {'pid': i, **{k: n[k] for k in ('ko', 'ja', 'en', 'auto') if k in n}}
     cur_work = [None]
     def S(name):
         sid = studio_sid(name)
@@ -214,7 +217,7 @@ def main():
             studios[sid] = {'id': sid, 'name': nm, 'works': []}
             if founded: studios[sid]['founded'] = founded
         return sid
-    def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'auto') if k in n}}
+    def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'en', 'auto') if k in n}}
 
     LAF = laftel_index()
     made, nonjp, details = 0, {}, {}

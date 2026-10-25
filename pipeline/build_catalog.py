@@ -47,7 +47,12 @@ for x in a:
     if not f and mal: f=fr.get(('mal',int(mal)))
     if f and not adb and f.get('anidb_id'): adb=str(f['anidb_id'])
     t=titles.get(int(adb),{}) if adb else {}
-    ja=pick(t,'ja') or next((y for y in x['synonyms'] if kana.search(y)),None) or next((y for y in x['synonyms'] if cjk.search(y) and not hangul.search(y)),None)
+    PH=re.compile(r'[\(（]\s*(続編|新作|新シリーズ|仮|仮題|仮称|タイトル未定)\s*[\)）]|\(仮\)')     # 발표 전 자리표시 제목
+    ja=pick(t,'ja')
+    if ja and PH.search(ja): ja=next((y for y in x['synonyms'] if kana.search(y) and not PH.search(y) and y.replace(' ','').startswith(PH.sub('',ja).replace(' ','').strip())),None) or ja
+    ja=ja or next((y for y in x['synonyms'] if kana.search(y)),None) or next((y for y in x['synonyms'] if cjk.search(y) and not hangul.search(y)),None)
+    if ja and re.fullmatch(r'[ぁ-ん]{2,6}', ja):          # 「るるりり」 같은 히라가나 줄임말이 뽑히면 정식 제목으로
+        ja=next((y for y in x['synonyms'] if re.search(r'[\u30a0-\u30ff\u4e00-\u9fff]', y) and len(y) >= 6 and not hangul.search(y)), None) or ja
     ko=pick(t,'ko') or next((y for y in x['synonyms'] if hangul.search(y)),None)
     ko=add_season(ko, pick(t,'ja') or next((y for y in x['synonyms'] if kana.search(y)),None), x['title'])
     en=pick(t,'en') ; ro=pick(t,'x-jat',('main','official','syn')) or x['title']
@@ -61,7 +66,7 @@ for x in a:
     elif 'anilist' in pic: pic='A'+pic
     elif 'nopicture' in pic or 'no_pic' in pic: pic=''
     tm=(f or {}).get('themoviedb_id') or {}
-    rec=dict(k=k,r=ro,ja=ja,ko=ko,en=en,ty=x['type'][0] if x['type']!='UNKNOWN' else 'X',
+    rec=dict(k=k,_syn=[y for y in x['synonyms'] if not hangul.search(y)][:40],r=ro,ja=ja,ko=ko,en=en,ty=x['type'][0] if x['type']!='UNKNOWN' else 'X',
         y=x['animeSeason'].get('year'),q=SEAS.get(x['animeSeason'].get('season')),
         e=x['episodes'],d=dur,st=x['status'][0],p=pic,stu=x['studios'][:3],
         al=al,mal=mal,adb=adb,tmdb=tm.get('tv') if isinstance(tm,dict) else None,tms=((f or {}).get('season') or {}).get('tmdb'),
@@ -108,31 +113,50 @@ def union(a, b):
 buckets = collections.defaultdict(list)
 CJK = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
 def keys(r):
-    ks = set()
-    j = nja(r['ja'])
-    if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: ks.add(('ja', j))            # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
-    for t in (r['r'], r.get('en')):
+    """비교 키: (종류, 정규화한 제목, 대표 제목인지). 다른 이름(synonyms)끼리만 같은 경우는 합치지 않으려고 대표 여부를 붙임
+    (예: 「Hungry Days」라는 다른 이름을 함께 가진 서로 다른 광고 영상)."""
+    ks = {}
+    def add(k, prim): ks[k] = ks.get(k, False) or prim
+    for jt, prim in [(r['ja'], True)] + [(y, False) for y in r.get('_syn', []) if CJK.search(y)]:
+        j = nja(jt)
+        if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: add(('ja', j), prim)       # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
+    for t, prim in [(r['r'], True), (r.get('en'), True)] + [(y, False) for y in r.get('_syn', []) if not CJK.search(y)]:
         n = nro(t)
-        if len(n) >= 4: ks.add(('ro', n))
+        if len(n) >= 6: add(('ro', n), prim)
     return ks
 for i, r in enumerate(out):
-    if r['adb']: buckets[('adb', r['adb'])].append(i)
-    for key in keys(r): buckets[('t',) + key].append(i)
+    if r['adb']: buckets[('adb', r['adb'])].append((i, True))
+    for key, prim in keys(r).items(): buckets[('t',) + key].append((i, prim))
     kb = nbare(r['ja'])
-    if len(kb) >= 4 and (kb != nja(r['ja']) or not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append(i)
+    if len(kb) >= 4 and (kb != nja(r['ja']) or not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append((i, True))
+def digits(r): return set(re.findall(r'\d+', unicodedata.normalize('NFKC', (r['ja'] or '') + ' ' + (r['r'] or ''))))
+def prefix_ok(x, y, n=4):
+    return any(len(p) >= n and len(q) >= n and p[:n] == q[:n] for p, q in ((nja(x['ja']), nja(y['ja'])), (nro(x['r']), nro(y['r']))))
+def syn_ok(a, b):
+    """한쪽의 「다른 이름」과만 같을 때는 더 엄격하게: 같은 해, 제목 속 숫자(시즌·편 번호)가 서로 맞고, 대표 제목 앞부분이 같을 것
+    (「오시리 탐정 9기 2쿨」과 「10기」, 「사이보그 009 콜 오브 저스티스」 1·2편, 「원피스」·「드래곤볼」 같은 방송 특집이 섞이지 않게)"""
+    if a['y'] and b['y'] and a['y'] != b['y']: return False
+    da, db = digits(a), digits(b)
+    if da and db and da != db: return False
+    return prefix_ok(a, b)
 def compatible(a, b):
     """같은 제목일 때 같은 작품으로 볼지: 형식이 같고(미분류는 예외), 연도 차이 1년 이내(한쪽이 미상이면 허용).
     출처마다 방영 시기를 다르게 적는 경우(예: 한 곳은 봄, 한 곳은 여름)가 있어 분기는 보지 않음."""
     if a['y'] and b['y'] and abs(a['y'] - b['y']) > 1: return False
     if a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']):
         # 형식이 달라도, 한쪽이 ID 없는 약한 출처(ANN 등)뿐이고 연도가 둘 다 있으면 같은 작품으로 봄 (약한 출처는 형식을 자주 다르게 적음)
+        # 단, TV·웹끼리 또는 OVA·스페셜·웹끼리만 (극장판은 다른 형식과 섞지 않음: 「비밀의 아코짱」 TV와 극장판 같은 경우)
         weak = lambda r: not (r['al'] or r['mal'] or r['adb'])
-        return (weak(a) or weak(b)) and bool(a['y'] and b['y'])
+        near = {a['ty'], b['ty']} <= {'T', 'O'} or {a['ty'], b['ty']} <= {'V', 'S', 'O'}
+        return (weak(a) or weak(b)) and bool(a['y'] and b['y']) and near
     return True
 for (kind, *rest), idx in buckets.items():
     for x in range(len(idx)):
         for y_ in range(x + 1, len(idx)):
-            a, b = out[idx[x]], out[idx[y_]]
+            (ia, pa), (ib, pb) = idx[x], idx[y_]
+            if not (pa or pb): continue                      # 둘 다 「다른 이름」으로만 같으면 합치지 않음
+            a, b = out[ia], out[ib]
+            if kind == 't' and not (pa and pb) and not syn_ok(a, b): continue
             if kind == 't' and not compatible(a, b): continue
             if kind == 'tb':
                 # 괄호를 뺀 제목으로만 같은 경우: 형식이 같고, 한쪽이 AniList·MAL ID가 없는 보조 출처 항목이고,
@@ -140,7 +164,7 @@ for (kind, *rest), idx in buckets.items():
                 if a['ty'] != b['ty'] and 'X' not in (a['ty'], b['ty']): continue
                 if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue
                 if not a['y'] or not (nja(a['ja']) == rest[0] or nja(b['ja']) == rest[0]): continue
-            union(idx[x], idx[y_])
+            union(ia, ib)
 groups = collections.defaultdict(list)
 for i in range(len(out)): groups[find(i)].append(i)
 def rank(r): return (bool(r['al']), bool(r['mal']), bool(r['adb']), r['p'][:1] in ('M', 'A'))
@@ -155,13 +179,13 @@ for g in groups.values():
         if (o.get('e') or 0) > (m.get('e') or 0): m['e'] = o['e']      # 방영 전 자리표시(1화)보다 큰 값이 실제에 가까움
         m['rel'] = m['rel'] + [x for x in o['rel'] if x not in m['rel']]
         m['tags'] = m['tags'] + [t for t in o['tags'] if t not in m['tags']]
-        m.setdefault('_alias', []).append(o['k'])
+        m.setdefault('_alias', []).append(o['k']); m['_syn'] = m.get('_syn', []) + o.get('_syn', [])
     merged.append(m)
 print('중복 합치기:', len(out), '→', len(merged))
 out = merged
 key2i = {r['k']: i for i, r in enumerate(out)}
 alias = {a: r['k'] for r in out for a in r.get('_alias', [])}
-for r in out: r.pop('_alias', None)
+for r in out: r.pop('_alias', None); r.pop('_syn', None)
 
 # resolve relations to keys
 url2k={}

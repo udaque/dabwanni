@@ -231,3 +231,6 @@ html{touch-action:manipulation}
 .hbars.tight{gap:3px 8px}
 .hbars.tight .bar{height:10px}
 .hbars.tight .lab,.hbars.tight .num{font-size:12px;line-height:1.25}
+.rstars{color:#F2A900;letter-spacing:1px;white-space:nowrap;font-size:14px}
+.rstars i{font-style:normal;color:var(--line)}
+.tabs button{font-size:var(--tabfs,15px);padding-left:var(--tabpad,6px);padding-right:var(--tabpad,6px);white-space:nowrap}

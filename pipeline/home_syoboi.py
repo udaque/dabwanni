@@ -1,4 +1,4 @@
-"""집 PC에서 쇼보이 캘린더(syoboi)만 수집해 R2에 올립니다. 윈도우·맥·리눅스 공통.
+"""집 PC에서 쇼보이 캘린더(syoboi)와 라프텔(laftel)을 수집해 R2에 올립니다. 윈도우·맥·리눅스 공통.
 깃허브 액션 서버는 쇼보이 쪽 클라우드플레어 확인 화면에 막혀서, 이 단계만 집 인터넷에서 돌립니다.
 매일 클라우드 갱신(한국 시간 03:30)보다 먼저 끝나도록 새벽 1시쯤 돌리세요. 병합·배포는 클라우드 갱신이 합니다.
 
@@ -13,7 +13,7 @@ R2에는 sync_r2.sh와 같은 형식(raw/<출처>.tar.zst)으로 주고받습니
 import os, sys, io, json, tarfile, shutil, subprocess, datetime
 
 ROOT = os.path.dirname(os.path.abspath(__file__)); RAW = os.path.join(ROOT, 'raw')
-SRC = 'syoboi'
+SRCS = ('syoboi', 'laftel')      # 깃허브 서버에서 막히는 출처들 (run_all.py의 HOME_ONLY와 같게)
 
 def say(*a): print(datetime.datetime.now().strftime('%H:%M:%S'), *a, flush=True)
 
@@ -63,17 +63,19 @@ def main():
     for f in ('_catalog.json', '_runs.json'):
         try: s3.download_file(B, 'raw/' + f, os.path.join(RAW, f)); say('받음:', f)
         except Exception as e: say('받지 못함:', f, '(첫 실행이면 정상)', type(e).__name__)
-    try:
-        data = s3.get_object(Bucket=B, Key=f'raw/{SRC}.tar.zst')['Body'].read()
-        shutil.rmtree(os.path.join(RAW, SRC), ignore_errors=True); unpack(data, RAW); say(f'받음: {SRC}.tar.zst ({len(data)//1024}KB)')
-    except s3.exceptions.NoSuchKey: say(f'R2에 {SRC} 묶음이 아직 없습니다 (처음부터 수집)')
+    for SRC in SRCS:
+        try:
+            data = s3.get_object(Bucket=B, Key=f'raw/{SRC}.tar.zst')['Body'].read()
+            shutil.rmtree(os.path.join(RAW, SRC), ignore_errors=True); unpack(data, RAW); say(f'받음: {SRC}.tar.zst ({len(data)//1024}KB)')
+        except s3.exceptions.NoSuchKey: say(f'R2에 {SRC} 묶음이 아직 없습니다 (처음부터 수집)')
     # 수집 (병합·배포는 클라우드 갱신이 함)
     env = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
     r = subprocess.run([sys.executable, 'run_all.py', '--home', '--budget-min', budget], cwd=ROOT, env=env)
     if r.returncode: say('쇼보이 수집에 실패한 항목이 있습니다 (pipeline/logs/summary.md 참고)')
     # 올리기: 쇼보이 묶음 + 실행 기록
-    if os.path.isdir(os.path.join(RAW, SRC)):
-        z = pack(RAW, SRC); s3.put_object(Bucket=B, Key=f'raw/{SRC}.tar.zst', Body=z); say(f'올림: {SRC}.tar.zst ({len(z)//1024}KB)')
+    for SRC in SRCS:
+        if os.path.isdir(os.path.join(RAW, SRC)):
+            z = pack(RAW, SRC); s3.put_object(Bucket=B, Key=f'raw/{SRC}.tar.zst', Body=z); say(f'올림: {SRC}.tar.zst ({len(z)//1024}KB)')
     if os.path.exists(os.path.join(RAW, '_runs.json')): s3.upload_file(os.path.join(RAW, '_runs.json'), B, 'raw/_runs.json'); say('올림: _runs.json')
     sm = os.path.join(ROOT, 'logs', 'summary.md')
     if os.path.exists(sm): print(open(sm, encoding='utf-8').read()[-1500:])
