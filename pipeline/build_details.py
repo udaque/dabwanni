@@ -242,7 +242,8 @@ def main():
         if al:
             stmap = {'FINISHED': 'F', 'RELEASING': 'O', 'NOT_YET_RELEASED': 'U', 'CANCELLED': 'C', 'HIATUS': 'H'}
             if al.get('status') in stmap: w['st'] = stmap[al['status']]
-            if al.get('episodes'): w['e'] = al['episodes']
+            # 방영 전·방영 중인 작품은 AniList 화수가 「1」 같은 자리표시일 때가 많아, 그때는 화수를 줄이지 않음
+            if al.get('episodes') and (al.get('status') == 'FINISHED' or al['episodes'] > (w.get('e') or 0)): w['e'] = al['episodes']
             if al.get('countryOfOrigin') and al['countryOfOrigin'] != 'JP': nonjp[k] = al['countryOfOrigin']
             if al.get('source'): d['source'] = SOURCE_KO.get(al['source'], al['source'])
             d['genres'] = [GENRE_KO.get(g, g) for g in al.get('genres') or []]
@@ -378,6 +379,9 @@ def main():
             L = sorted(eps.values(), key=lambda e: (0, int(e['no'])) if e['no'].isdigit() else (1, e['no']))
             for e in L:
                 if e['no'].isdigit(): e['i'] = int(e['no']) - (O or 0)
+            # 회차 목록(TMDB·쇼보이 등)이 화수보다 길면, 아직 안 끝난 작품은 목록 쪽이 실제에 가까움
+            mx = max((e['i'] for e in L if isinstance(e.get('i'), int)), default=0)
+            if w.get('st') in ('U', 'O', 'H') and mx > (w.get('e') or 0): w['e'] = mx
             use = {}
             for e in L:
                 for s in e.get('songs', []): use[(s['kind'], s['title'])] = use.get((s['kind'], s['title']), 0) + 1

@@ -209,7 +209,8 @@ function fmtDHM(min){
   return `${d ? `${fmtN(d)}<small>${u.d}</small> ` : ''}${d || h ? `${h}<small>${u.h}</small> ` : ''}${m}<small>${u.m}</small>`;
 }
 const hbarRow = (label, parts, max, total) => `<span class="lab">${label}</span><span class="bar">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / max * 100).toFixed(2)}%"></i>` : '').join('')}</span><span class="num">${fmtN(total)}</span>`;
-let statsBy = 'q';
+let statsBy = 'q', statsTok = 0;
+const SCOPE = Object.assign({g: false, i: false}, store.get('statsScope', {}));   // 봤음 기준 통계에 보는 중·관심만도 넣을지
 function renderStats(){
   const L = [];
   for (const [k, m] of Object.entries(marks)) { const w = BYK.get(k); if (w && (m.w || m.i || m.ep || m.rate)) L.push([w, m]); }
@@ -236,11 +237,13 @@ function renderStats(){
   }
   const G = [...grp].sort((x, y) => y[1].o - x[1].o), gmax = Math.max(1, ...G.map(([, g]) => g.w + g.g + g.i));
 
-  const count = (arr, f) => { const c = new Map(); arr.forEach(x => f(x).forEach(k => k && c.set(k, (c.get(k) || 0) + 1))); return [...c].sort((p, q) => q[1] - p[1]); };
-  const byType = count(watched, ([w]) => [t(TYPE[w.ty])]);
-  const byTag = count(watched, ([w]) => (w.tags || []).map(i => t(TAGS[i]))).slice(0, 10);
-  const byStudio = count(watched, ([w]) => (w.stu || []).map(i => STUDIOS[i] && (S.lang === 'ko' ? STUDIOS[i][1] : STUDIOS[i][0]))).slice(0, 10);
-  const byDecade = count(watched, ([w]) => [w.y ? F('decade', Math.floor(w.y / 10) * 10) : t('연도 미상')]).sort((p, q) => q[0].localeCompare(p[0]));
+  const count = (arr, f) => { const c = new Map(); arr.forEach(x => new Set(f(x)).forEach(k => k && c.set(k, (c.get(k) || 0) + 1))); return [...c].sort((p, q) => q[1] - p[1]); };
+  // 봤음 기준 (옵션으로 보는 중·관심만 포함)
+  const B = L.filter(([, m]) => m.w || (SCOPE.g && m.ep && !m.w) || (SCOPE.i && m.i && !m.w && !m.ep));
+  const byType = count(B, ([w]) => [t(TYPE[w.ty])]);
+  const byTag = count(B, ([w]) => (w.tags || []).map(i => t(TAGS[i]))).slice(0, 10);
+  const byStudio = count(B, ([w]) => (w.stu || []).map(i => STUDIOS[i] && (S.lang === 'ko' ? STUDIOS[i][1] : STUDIOS[i][0]))).slice(0, 10);
+  const byDecade = count(B, ([w]) => [w.y ? F('decade', Math.floor(w.y / 10) * 10) : t('연도 미상')]).sort((p, q) => q[0].localeCompare(p[0]));
 
   // 별점
   const ratedL = L.filter(([, m]) => m.rate), rates = [1, 2, 3, 4, 5].map(n => ratedL.filter(([, m]) => m.rate === n).length);
@@ -273,12 +276,42 @@ function renderStats(){
       <div class="hbars tight">${G.map(([k, g]) => hbarRow(esc(k), [['w', g.w], ['g', g.g], ['i', g.i]], gmax, g.w + g.g + g.i)).join('')}</div></div>`;
   h += `<div class="stbox"><h2>${t('최근 12개월 다 본 작품')}</h2><div class="vbars">${months.map(([, mo, n]) => `<div class="c"><em>${n || ''}</em><b style="height:${(n / mmax * 100).toFixed(1)}%;${n ? '' : 'min-height:2px;opacity:.25'}"></b><span>${F('month', mo)}</span></div>`).join('')}</div></div>`;
   if (avgProg != null) h += `<div class="stbox"><h2>${t('보는 중 진행률')}<span class="pill">${t('평균')} ${Math.round(avgProg * 100)}%</span></h2><div class="hbars">${watching.filter(([w]) => total(w)).sort((p, q) => q[1].ep / total(q[0]) - p[1].ep / total(p[0])).slice(0, 8).map(([w, m]) => hbarRow(esc(short(title(w))), [['g', m.ep]], total(w), m.ep).replace(`<span class="num">${fmtN(m.ep)}</span>`, `<span class="num">${m.ep}/${total(w)}</span>`)).join('')}</div></div>`;
-  h += one(t('형식별 (봤음)'), byType, Math.max(1, ...byType.map(x => x[1])), 'w');
-  h += one(t('방영 연대별 (봤음)'), byDecade, Math.max(1, ...byDecade.map(x => x[1])), 'w');
+  h += `<div class="stscope" id="stScope"><span class="stbase"><i class="dot w"></i>${t('봤음')}</span>
+      <button data-sc="g" class="${SCOPE.g ? 'on' : ''}"><i class="dot g"></i>${t('보는 중')}</button>
+      <button data-sc="i" class="${SCOPE.i ? 'on' : ''}"><i class="dot i"></i>${t('관심만')}</button><span class="pill">${fmtN(B.length)}</span></div>`;
+  h += one(t('형식별'), byType, Math.max(1, ...byType.map(x => x[1])), 'w');
+  h += one(t('방영 연대별'), byDecade, Math.max(1, ...byDecade.map(x => x[1])), 'w');
   h += one(t('많이 본 장르·태그'), byTag, Math.max(1, ...byTag.map(x => x[1])), 'w');
   h += one(t('많이 본 제작사'), byStudio, Math.max(1, ...byStudio.map(x => x[1])), 'w');
+  h += `<div id="stPeople">${B.length ? `<div class="stbox"><p class="stempty">${t('불러오는 중')}</p></div>` : ''}</div>`;
   $('#stats').innerHTML = h;
+  $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
+  peopleStats(B, ++statsTok);
   $('#stBy').onclick = e => { const b = e.target.closest('[data-by]'); if (!b) return; statsBy = b.dataset.by; renderStats(); };
+}
+
+// 감독·성우·음악 등: 기준 작품들의 상세를 불러와 사람별로 몇 작품에 참여했는지 셈
+async function peopleStats(B, tok){
+  const ds = await Promise.all(B.map(([w]) => item('detail', w.k)));
+  if (tok !== statsTok || !$('#stPeople')) return;
+  const groups = [
+    ['많이 본 감독', d => (d.staff || []).filter(s => s.role === '감독' || s.role === '총감독').flatMap(s => s.people)],
+    ['많이 본 성우', d => (d.characters || []).flatMap(c => (c.cast || []).filter(v => !v.lang || v.lang === 'ja'))],
+    ['많이 본 음악 담당', d => (d.staff || []).filter(s => s.role === '음악').flatMap(s => s.people)],
+    ['많이 들은 주제가 가수', d => (d.songs || []).flatMap(s => (s.credits || []).filter(c => c.role === '歌'))],
+    ['많이 본 각본가', d => (d.staff || []).filter(s => s.role === '시리즈 구성' || s.role === '각본').flatMap(s => s.people)],
+    ['많이 본 캐릭터 디자이너', d => (d.staff || []).filter(s => s.role === '캐릭터 디자인').flatMap(s => s.people)],
+  ];
+  let h = '';
+  for (const [name, pick] of groups) {
+    const c = new Map(), ref = new Map();
+    ds.forEach(d => { if (!d) return; new Set(pick(d).filter(p => p && p.pid).map(p => { ref.set(p.pid, p); return p.pid; })).forEach(id => c.set(id, (c.get(id) || 0) + 1)); });
+    const rows = [...c].sort((p, q) => q[1] - p[1]).slice(0, 10);
+    if (!rows.length) continue;
+    const mx = rows[0][1];
+    h += `<div class="stbox"><h2>${t(name)}</h2><div class="hbars">${rows.map(([id, n]) => hbarRow(pLink(ref.get(id)), [['w', n]], mx, n)).join('')}</div></div>`;
+  }
+  $('#stPeople').innerHTML = h;
 }
 
 /* ---------- 연도·분기 고르기 ---------- */

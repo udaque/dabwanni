@@ -47,6 +47,10 @@ const I18N = {
   '보는 중 진행률': ['視聴中の進み具合', 'Watching progress'],
   '형식별 (봤음)': ['形式別（視聴済み）', 'By format (watched)'], '방영 연대별 (봤음)': ['年代別（視聴済み）', 'By decade (watched)'],
   '많이 본 장르·태그': ['よく見るジャンル・タグ', 'Top genres & tags'], '많이 본 제작사': ['よく見る制作会社', 'Top studios'],
+  '형식별': ['形式別', 'By format'], '방영 연대별': ['年代別', 'By decade'],
+  '많이 본 감독': ['よく見る監督', 'Top directors'], '많이 본 성우': ['よく見る声優', 'Top voice actors'], '많이 본 음악 담당': ['よく見る音楽担当', 'Top composers'],
+  '많이 들은 주제가 가수': ['よく聴く主題歌アーティスト', 'Top theme song artists'], '많이 본 각본가': ['よく見る脚本家', 'Top writers'],
+  '많이 본 캐릭터 디자이너': ['よく見るキャラクターデザイナー', 'Top character designers'],
   '연도 미상': ['年不明', 'Unknown year'], '미상': ['不明', 'Unknown'],
   // 상세
   '시작한 날': ['見始めた日', 'Started'], '다 본 날': ['見終えた日', 'Finished'], '다시 본 횟수': ['見返した回数', 'Rewatches'], '메모': ['メモ', 'Notes'],

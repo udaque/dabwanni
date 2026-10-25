@@ -234,3 +234,9 @@ html{touch-action:manipulation}
 .rstars{color:#F2A900;letter-spacing:1px;white-space:nowrap;font-size:14px}
 .rstars i{font-style:normal;color:var(--line)}
 .tabs button{font-size:var(--tabfs,15px);padding-left:var(--tabpad,6px);padding-right:var(--tabpad,6px);white-space:nowrap}
+.stscope{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+.stscope .stbase,.stscope button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:14px;font-weight:700;white-space:nowrap;background:var(--surface)}
+.stscope .stbase{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.stscope button{color:var(--sub)}
+.stscope button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.hbars .lab .link{font-size:13px;max-width:9.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom;text-align:left}
