@@ -285,11 +285,12 @@ def main():
                 if al.get(f): d[f] = al[f]
             if al.get('isAdult'): d['adult'] = True
             if (al.get('trailer') or {}).get('site') == 'youtube': d['pv'] = 'https://www.youtube.com/watch?v=' + al['trailer']['id']
-        yt = load('youtube', k)
-        if yt and (yt.get('pv') or yt.get('op') or yt.get('ed')):
-            d['yt'] = {x: yt[x] for x in ('pv', 'op', 'ed') if yt.get(x)}        # 공식 채널 유튜브 영상 (상세 화면에 바로 재생)
             d['links'] = [{'site': l['site'], 'url': l['url']} for l in al.get('externalLinks') or [] if l.get('type') in ('INFO', 'SOCIAL')]
             d['relations'] = [{'k': 'a' + str(e['node']['id']), 'type': e['relationType']} for e in (al.get('relations') or {}).get('edges', []) if ('a' + str(e['node']['id'])) in BY]
+        yt = {x: v for x, v in (load('youtube', k) or {}).items() if x in ('op', 'ed') and v}     # 공식 채널 오프닝·엔딩 (유튜브 검색)
+        tr = (al or {}).get('trailer') or {}
+        if tr.get('site') == 'youtube' and tr.get('id'): yt['pv'] = tr['id']               # AniList 예고편은 공식으로 보고 그대로 씀
+        if yt: d['yt'] = yt
         if w.get('site') and not any(l['site'] == 'Official Site' for l in d.get('links', [])): d.setdefault('links', []).insert(0, {'site': 'Official Site', 'url': w['site']})
 
         # 캐릭터·성우
