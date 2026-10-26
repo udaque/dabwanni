@@ -243,6 +243,9 @@ def season_code(ja, romaji=None, en=None, roman=False):
                 m = re.search(p, src)
                 if m and int(m.group(1)) >= 2: return int(m.group(1))
     s = first([r'第\s*(\d+)\s*期', r'(\d+)\s*期', r'(\d+)(?:st|nd|rd|th)\s*[Ss]eason', r'[Ss]eason\s*(\d+)', r'第\s*(\d+)\s*シーズン'])
+    if not s:      # 「地獄楽 第二期」처럼 한자 숫자
+        m = re.search(r'第([二三四五六七八九十])期', t)
+        if m: s = '二三四五六七八九十'.index(m.group(1)) + 2
     s = s or (roman_season(ja, romaji, en) if roman else None)
     c = first([r'[第割]\s*(\d+)\s*クール', r'(\d+)\s*クール目', r'[Pp]art\s*(\d+)', r'[Cc]our\s*(\d+)'])
     b = first([r'第\s*(\d+)\s*部'])

@@ -273,7 +273,8 @@ def main():
             if al.get('status') in stmap: w['st'] = stmap[al['status']]
             # 방영 전·방영 중인 작품은 AniList 화수가 「1」 같은 자리표시일 때가 많아, 그때는 화수를 줄이지 않음
             if al.get('episodes') and (al.get('status') == 'FINISHED' or al['episodes'] > (w.get('e') or 0)): w['e'] = al['episodes']
-            if al.get('countryOfOrigin') and al['countryOfOrigin'] != 'JP': nonjp[k] = al['countryOfOrigin']
+            if al.get('countryOfOrigin') and al['countryOfOrigin'] not in ('JP', 'KR'): nonjp[k] = al['countryOfOrigin']      # 한국 제작은 넣음
+            if al.get('countryOfOrigin') == 'KR': w['kr'] = 1
             if al.get('source'): d['source'] = SOURCE_KO.get(al['source'], al['source'])
             d['genres'] = [GENRE_KO.get(g, g) for g in al.get('genres') or []]
             d['tags'] = [TAG_KO[t['name'].lower()] for t in al.get('tags') or [] if t['name'].lower() in TAG_KO and not t.get('isMediaSpoiler')][:12]

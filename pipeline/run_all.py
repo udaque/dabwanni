@@ -8,7 +8,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__)); LOGS = os.path.join(ROOT, 'lo
 
 # (이름, 명령, 최대 시간 비율, 실행 주기 일수: 이 기간 안에 성공했으면 건너뜀)
 STEPS = [
- ('catalog',        ['bash', '-c', './fetch_sources.sh && python3 build_catalog.py && python3 pack_catalog.py'], 0.03, 1),
+ ('catalog',        ['bash', '-c', './fetch_sources.sh && (python3 collect_anilist_season.py || echo "AniList 분기 목록 실패: 지난번 받은 것으로 계속") && python3 build_catalog.py && python3 pack_catalog.py'], 0.05, 1),
  ('wikidata',       ['python3', 'collect_wikidata.py'], 0.05, 7),
  ('syoboi',         ['python3', 'collect_syoboi.py'], 0.20, 0),
  ('jawiki',         ['python3', 'collect_jawiki.py'], 0.12, 0),
@@ -30,7 +30,7 @@ def last_ok(name):
     d = json.load(open(p)) if os.path.exists(p) else {}
     return d.get(name)
 # 단계의 코드가 바뀌면 실행 주기와 상관없이 다시 돌림 (예: 중복 합치기를 고친 날 작품 목록을 바로 다시 만들게)
-CODE = {'catalog': ['fetch_sources.sh', 'build_catalog.py', 'pack_catalog.py', 'names_ko.py', 'translit.py']}
+CODE = {'catalog': ['fetch_sources.sh', 'collect_anilist_season.py', 'build_catalog.py', 'pack_catalog.py', 'names_ko.py', 'translit.py']}
 def code_hash(name, cmd):
     import hashlib
     files = CODE.get(name) or [x for x in cmd if x.endswith(('.py', '.sh'))]

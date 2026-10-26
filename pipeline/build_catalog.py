@@ -1,11 +1,12 @@
 """카탈로그 생성: 전체 작품 목록 + 3개 국어 제목 + ID 매핑 → sources/catalog_full.json"""
 import os
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),"sources"))
-import json,re,collections,sys
+import json, glob, os,re,collections,sys
 sys.path.insert(0,'..')
 from names_ko import TAG_KO, add_season
 a=json.load(open('aod.json'))['data']
-NONJP={'chinese animation','chinese production','korean animation','south korean production','north korean production','original in english'}
+NONJP={'chinese animation','chinese production','original in english'}      # 한국 제작 작품은 넣음 (일본·한국 작품을 다룸)
+KOREAN={'korean animation','south korean production','korean production'}
 CO=re.compile(r'japanese co-production|japanese production|sino-japanese|korean-japanese')
 def idof(srcs,site):
     for s in srcs:
@@ -38,6 +39,43 @@ def pick(t,lang,types=('official','main','syn')):
     for ty in types:
         if t.get((lang,ty)): return t[(lang,ty)][0]
 SEAS={'WINTER':1,'SPRING':2,'SUMMER':3,'FALL':4}
+# ── AniList 분기 목록으로 보충 (manami 원천이 7월 판에서 멈춘 동안 새로 발표된 작품과 바뀐 시기·상태·화수) ──
+FMT={'TV':'TV','TV_SHORT':'TV','ONA':'ONA','OVA':'OVA','SPECIAL':'SPECIAL','MOVIE':'MOVIE','MUSIC':'SPECIAL'}
+STAT={'FINISHED':'FINISHED','RELEASING':'ONGOING','NOT_YET_RELEASED':'UPCOMING','HIATUS':'ONGOING','CANCELLED':'FINISHED'}
+SEAS_OF={1:'WINTER',2:'SPRING',3:'SUMMER',4:'FALL'}
+def from_anilist(m):
+    sd=m.get('startDate') or {}
+    yr=sd.get('year') or m.get('seasonYear'); sea=SEAS_OF[(sd['month']-1)//3+1] if sd.get('month') else (m.get('season') or 'UNDEFINED')
+    t=m.get('title') or {}
+    syn=[x for x in [t.get('native'), t.get('english')] + (m.get('synonyms') or []) if x]
+    return {'title': t.get('romaji') or t.get('english') or t.get('native') or '', 'type': FMT.get(m.get('format'),'UNKNOWN'),
+            'episodes': m.get('episodes') or 0, 'status': STAT.get(m.get('status'),'UNKNOWN'),
+            'animeSeason': {'season': sea, 'year': yr}, 'picture': (m.get('coverImage') or {}).get('large') or '',
+            'synonyms': syn, 'sources': [f"https://anilist.co/anime/{m['id']}"] + ([f"https://myanimelist.net/anime/{m['idMal']}"] if m.get('idMal') else []),
+            'relatedAnime': [f"https://anilist.co/anime/{e['node']['id']}" for e in ((m.get('relations') or {}).get('edges') or []) if (e.get('node') or {}).get('type')=='ANIME'],
+            'tags': [g.lower() for g in m.get('genres') or []] + ({None: [], 'JP': [], 'KR': ['korean animation'], 'CN': ['chinese animation'], 'TW': ['chinese animation']}.get(m.get('countryOfOrigin'), ['original in english'])),
+            'studios': [n['name'] for n in ((m.get('studios') or {}).get('nodes') or [])], 'duration': {'value': (m.get('duration') or 0)*60, 'unit': 'SECONDS'} if m.get('duration') else {}}
+ALS={}
+for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),'raw','anilist_season','*.json'))):
+    try:
+        for m in json.load(open(f,encoding='utf-8')).get('media') or []: ALS[str(m['id'])]=m
+    except Exception as ex: print('AniList 분기 목록 읽기 실패', f, ex)
+if ALS:
+    seen=set(); upd=0
+    for x in a:
+        al_=idof(x['sources'],'anilist.co')
+        if al_ and al_ in ALS:
+            seen.add(al_); n=from_anilist(ALS[al_])
+            # 이미 있는 작품: 방영 시기·상태는 AniList 값으로, 화수는 더 큰 쪽(방영 전 자리표시 1화 대비)
+            if n['animeSeason']['year']: x['animeSeason']=n['animeSeason']
+            if n['status']!='UNKNOWN': x['status']=n['status']
+            if n['episodes'] and (n['status']=='FINISHED' or n['episodes']>(x.get('episodes') or 0)): x['episodes']=n['episodes']
+            if not x.get('picture') or 'nopicture' in x['picture']: x['picture']=n['picture']
+            upd+=1
+    new=[from_anilist(m) for k_,m in ALS.items() if k_ not in seen]
+    a=a+new
+    print(f'AniList 분기 목록: 기존 {upd}편 시기·상태 갱신, 새 작품 {len(new)}편 추가')
+
 out=[];key2i={};dropped=collections.Counter()
 for x in a:
     tags=set(x['tags'])
@@ -51,6 +89,8 @@ for x in a:
     ja=pick(t,'ja')
     if ja and PH.search(ja): ja=next((y for y in x['synonyms'] if kana.search(y) and not PH.search(y) and y.replace(' ','').startswith(PH.sub('',ja).replace(' ','').strip())),None) or ja
     ja=ja or next((y for y in x['synonyms'] if kana.search(y)),None) or next((y for y in x['synonyms'] if cjk.search(y) and not hangul.search(y)),None)
+    if ja and len(ja) <= 4:                               # 「幼ラブ」처럼 짧은 줄임말이 뽑혔으면, 같은 글자로 시작하는 긴 정식 제목으로
+        ja=next((y for y in x['synonyms'] if y[:1]==ja[:1] and len(y) >= len(ja)+4 and kana.search(y) and not hangul.search(y)), None) or ja
     if ja and re.fullmatch(r'[ぁ-ん]{2,6}', ja):          # 「るるりり」 같은 히라가나 줄임말이 뽑히면 정식 제목으로
         ja=next((y for y in x['synonyms'] if re.search(r'[\u30a0-\u30ff\u4e00-\u9fff]', y) and len(y) >= 6 and not hangul.search(y)), None) or ja
     ko=pick(t,'ko') or next((y for y in x['synonyms'] if hangul.search(y)),None)
@@ -88,11 +128,19 @@ def nja(t):
     return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
 def nro(t):
     t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
+    t = re.sub(r'\b(part|cour|season)\s*(iv|iii|ii)\b', lambda m: m.group(1) + {'ii': '2', 'iii': '3', 'iv': '4'}[m.group(2)], t)   # 「Part II」 = 「Part 2」 (겹글자 줄이기 전에)
     t = re.sub(r'[^a-z0-9]', '', t)
     t = t.replace('wo', 'o').replace('ou', 'o').replace('uu', 'u').replace('oo', 'o')
     t = re.sub(r'(.)\1+', r'\1', t)                                   # Lilly / Lily 같은 겹글자 차이
     t = re.sub(r'(?:part|cour|cor)(\d)', r'pt\1', t)                         # 「Part 2」와 「Cour 2」는 같은 2쿨 (앞에서 ou→o로 바뀌어 cour는 cor가 됨)
     return t
+KANJI_NUM = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
+SEASON_MARK = re.compile(r'\s*(第\s*[0-9一二三四五六七八九十]+\s*(期|シーズン|クール|部)|[0-9]+\s*期|[0-9]+(st|nd|rd|th)\s*season|season\s*[0-9]+|part\s*([0-9]+|ii|iii|iv)|cour\s*[0-9]+)\s*$', re.I)
+def season_base(t):
+    """제목 끝의 시즌 표시를 뺀 이름 (「地獄楽 第二期」→「地獄楽」, 「Jigokuraku 2nd Season」→「Jigokuraku」). 표시가 없으면 None."""
+    t0 = unicodedata.normalize('NFKC', t or '').strip(); b = SEASON_MARK.sub('', t0).strip()
+    return b if b and b != t0 else None
+
 def nbare(t):
     # 괄호 속 덧붙임(「(新アニメ化プロジェクト)」·「[マジックナイト]」 등)을 뺀 제목
     return nja(re.sub(r'[\(（\[【][^\)）\]】]*[\)）\]】]', '', unicodedata.normalize('NFKC', t or '')))
@@ -131,6 +179,12 @@ def keys(r):
 for i, r in enumerate(out):
     if r['adb']: buckets[('adb', r['adb'])].append((i, True))
     for key, prim in keys(r).items(): buckets[('t',) + key].append((i, prim))
+    # 시즌 표시를 뺀 이름: 시즌 작품(번호 있음)은 'season', 번호 없는 보조 출처 항목은 'plain'으로 같은 해 같은 이름끼리 묶음
+    # (ANN이 2기를 그냥 「地獄楽」로 적은 항목을 「地獄楽 第二期」에 합치려고)
+    for t, nf in ((r['ja'], nja), (r['r'], nro)):
+        sb = season_base(t)
+        if sb and len(nf(sb)) >= 2: buckets[('tbase', nf(sb), r['y'])].append((i, 'season'))
+        elif not (r['al'] or r['mal']) and t and len(nf(t)) >= 2: buckets[('tbase', nf(t), r['y'])].append((i, 'plain'))
     kb = nbare(r['ja'])
     if len(kb) >= 4 and (kb != nja(r['ja']) or not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append((i, True))
 def digits(r): return set(re.findall(r'\d+', unicodedata.normalize('NFKC', (r['ja'] or '') + ' ' + (r['r'] or ''))))
@@ -153,12 +207,18 @@ def compatible(a, b):
         near = {a['ty'], b['ty']} <= {'T', 'O'} or {a['ty'], b['ty']} <= {'V', 'S', 'O'}
         return (weak(a) or weak(b)) and bool(a['y'] and b['y']) and near
     return True
-for (kind, *rest), idx in buckets.items():
+# 같은 해 시즌 짝(tbase)을 먼저 합쳐, 연도 1년 차이 규칙보다 앞서게 함 (예: ANN의 2025년 「Grand Blue Dreaming」은 2기에, 3기가 아니라)
+for (kind, *rest), idx in sorted(buckets.items(), key=lambda kv: kv[0][0] != 'tbase'):
     for x in range(len(idx)):
         for y_ in range(x + 1, len(idx)):
             (ia, pa), (ib, pb) = idx[x], idx[y_]
             if not (pa or pb): continue                      # 둘 다 「다른 이름」으로만 같으면 합치지 않음
             a, b = out[ia], out[ib]
+            if kind == 'tbase':
+                # 번호 있는 시즌 작품 하나와 번호 없는 보조 출처 항목 하나일 때만, 같은 해·비슷한 형식이면 합침
+                if {pa, pb} != {'season', 'plain'} or not a['y']: continue
+                if not ({a['ty'], b['ty']} <= {'T', 'O', 'X'} or a['ty'] == b['ty']): continue
+                union(ia, ib); continue
             if kind == 't' and not (pa and pb) and not syn_ok(a, b): continue
             if kind == 't' and not compatible(a, b): continue
             if kind == 'tb':

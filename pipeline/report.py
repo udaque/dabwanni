@@ -13,6 +13,14 @@ for name, status, note in run['results']:
     lines.append(f"| {name} | {ST.get(status, status)} | {c.get('ok', '')} | {c.get('empty', '')} | {c.get('fail', '')} | {c.get('skip', '')} | {s.get('minutes', '')} |")
     if status == 'failed' or s.get('reason') or note:
         fails.append((name, status, s.get('reason') or note, s.get('examples', [])))
+# 단계 안에서 따로 돈 출처(예: 작품 목록 단계 안의 AniList 분기 목록)도 줄로 보여 줌
+done = {n for n, _, _ in run['results']}
+for name, s in sorted(sm.items()):
+    if name in done: continue
+    c = s.get('counts', {}); status = s.get('status', '')
+    lines.append(f"| {name} | {ST.get(status, status)} | {c.get('ok', '')} | {c.get('empty', '')} | {c.get('fail', '')} | {c.get('skip', '')} | {s.get('minutes', '')} |")
+    if status == 'failed' or s.get('reason'):
+        fails.append((name, status, s.get('reason'), s.get('examples', [])))
 if fails:
     lines += ['', '### 자세한 내용']
     for name, status, reason, ex in fails:
