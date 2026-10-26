@@ -41,7 +41,37 @@ async function item(kind, id){
 }
 function lenKind(w){ const m = w.d ? w.d / 60 : null; if (m == null) return null; return m <= 5 ? 'short' : m <= 17 ? 'half' : m <= 35 ? 'normal' : 'long'; }
 function title(w, lang = S.lang){ const o = {ko:w.ko, ja:w.ja, en:w.en || w.r}; return o[lang] || (lang === 'en' ? w.r : null) || o.ko || o.ja || o.en || w.r; }
+// 시즌·쿨 꼬리표: 제목에서 「3기」 「第2クール」 「Season 3」 같은 표시를 빼고, 제목 바로 뒤에 꼬리표로 붙임
+const SEASON_RE = [
+  /\s*第\s*\d+\s*期/g, /\s*\d+\s*期(?=\s|$)/g, /\s*[第割]\s*\d+\s*クール/g, /\s*\d+\s*クール目/g, /\s*第\s*\d+\s*シーズン/g, /\s*第\s*\d+\s*部/g,
+  /\s*\d+(?:st|nd|rd|th)\s*Season/gi, /\s*Season\s*\d+/gi, /\s*Part\s*\d+/gi, /\s*Cour\s*\d+/gi,
+  /\s*\d+\s*기(?=\s|$)/g, /\s*시즌\s*\d+/g, /\s*\d+\s*쿨(?=\s|$)/g, /\s*파트\s*\d+/g, /\s*\d+\s*부(?=\s|$)/g, /\s*파이널(?=\s|$)/g];
+// 발표 전 임시 표기((Sequel)·(続編)·(新アニメ化プロジェクト) 등)는 늘 빼고, 시즌 표시는 꼬리표가 있을 때만 뺌
+const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-ka Project|TBA|Working Title|続編|新作|新シリーズ|仮|仮題|仮称|新アニメ化プロジェクト|新アニメ|アニメ化決定)\s*[\)）]/gi;
+function bareTitle(s, w){
+  if (!s) return s;
+  let x = s.replace(PLACEHOLDER, '');
+  if (w.sm) SEASON_RE.forEach(re => x = x.replace(re, ''));
+  return x.replace(/\s*[\(（]\s*[\)）]/g, '').trim() || s;
+}
+function seasonTags(w){
+  if (!w.sm) return '';
+  const L = S.lang, out = [], m = w.sm;
+  const s = m.match(/s(\d+)/), b = m.match(/b(\d+)/), c = m.match(/c(\d+)/);
+  if (s) out.push(L === 'ja' ? `第${s[1]}期` : L === 'en' ? `S${s[1]}` : `${s[1]}기`);
+  if (b) out.push(L === 'ja' ? `第${b[1]}部` : L === 'en' ? `Part ${b[1]}` : `${b[1]}부`);
+  if (c) out.push(L === 'ja' ? `第${c[1]}クール` : L === 'en' ? `Cour ${c[1]}` : `${c[1]}쿨`);
+  if (m === 'f') out.push(L === 'ja' ? 'ファイナル' : L === 'en' ? 'Final' : '파이널');
+  return out.map(x => ` <span class="stag">${x}</span>`).join('');
+}
+const titleHTML = w => esc(bareTitle(title(w), w)) + seasonTags(w);
 function subtitle(w){ const tt = title(w); return (S.lang === 'ko' ? [w.ja, w.en, w.r] : S.lang === 'ja' ? [w.en, w.r, w.ko] : [w.ja, w.r, w.ko]).find(x => x && x !== tt) || ''; }
+// 큰 키 비주얼(MAL의 「l」 판)이 없으면 보통 크기로, 그것도 없으면 빈 자리로
+function imgFallback(el){
+  const small = el.src.replace(/l\.(jpg|webp)(\?.*)?$/, '.$1');
+  if (!el.dataset.f && small !== el.src) { el.dataset.f = 1; el.src = small; return; }
+  el.replaceWith(Object.assign(document.createElement('div'), {className: 'ph'}));
+}
 // 키 비주얼: MAL은 기본(약 225px)과 큰 것(l, 약 425px)을 화면 밀도에 맞춰 고르게 함
 function img(w, big){
   if (!w.p) return '';
@@ -269,7 +299,7 @@ function renderStats(){
       <div class="row3"><span class="k">${t('본 시간')}</span><span class="v">${fmtDHM(min)}</span></div></div></div>`;
   if (ratedL.length) h += `<div class="stbox"><h2>${t('별점')}<span class="pill">${t('평균')} ${avgRate.toFixed(1)}</span></h2><div class="hbars">${rates.map((n, i) => hbarRow('★'.repeat(i + 1), [['g', n]], Math.max(1, ...rates), n)).reverse().join('')}</div></div>
     <div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || title(p[0]).localeCompare(title(q[0]))).map(([w, m]) =>
-      `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${esc(title(w))}</button></div><span class="rstars">${'★'.repeat(m.rate)}<i>${'★'.repeat(5 - m.rate)}</i></span></div>`).join('')}</div></div>`;
+      `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars">${'★'.repeat(m.rate)}<i>${'★'.repeat(5 - m.rate)}</i></span></div>`).join('')}</div></div>`;
   h += `<div class="stbox"><h2>${t('방영 시기별')}</h2>
       <div class="stseg" id="stBy"><button data-by="q" class="${statsBy === 'q' ? 'on' : ''}">${t('분기별')}</button><button data-by="y" class="${statsBy === 'y' ? 'on' : ''}">${t('연도별')}</button></div>
       <div class="legend3"><span><i class="dot w"></i>${t('봤음')}</span><span><i class="dot g"></i>${t('보는 중')}</span><span><i class="dot i"></i>${t('관심만')}</span></div>
@@ -445,7 +475,7 @@ function card(w){
   const m = marks[w.k] || {}, src = img(w), k = esc(w.k);
   return `<div class="card">
     <button class="kv" data-act="open" data-k="${k}" aria-label="${esc(title(w))} ${t('자세히')}"><span class="nokv">${t('키 비주얼 없음')}</span>${src ? `<img loading="lazy" src="${esc(src)}" ${srcset(w) ? `srcset="${esc(srcset(w))}" sizes="(max-width:420px) 46vw, 180px"` : ''} alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="badges" data-k="${k}">${badges(w)}</span></button>
-    <div class="meta"><div class="t1 ${S.lang === 'ja' ? 'ja' : ''}" data-act="open" data-k="${k}">${esc(title(w))}</div><div class="t2">${esc(subtitle(w))}</div><div class="pills">${infoPills(w)}</div></div>
+    <div class="meta"><div class="t1 ${S.lang === 'ja' ? 'ja' : ''}" data-act="open" data-k="${k}">${titleHTML(w)}</div><div class="t2">${esc(bareTitle(subtitle(w), w))}</div><div class="pills">${infoPills(w)}</div></div>
     ${progCtl(w)}
     <div class="acts"><button class="tg w ${m.w ? 'on' : ''}" data-act="w" data-k="${k}">${t('봤음')}</button><button class="tg i ${m.i ? 'on' : ''}" data-act="i" data-k="${k}">${t('관심')}</button></div>
   </div>`;
@@ -504,8 +534,8 @@ async function openWork(k){
 function workHTML(w, d){
   const m = marks[w.k] || {}, src = img(w, true), k = esc(w.k), tt = d?.titles || {};
   const titles = [[t('한국어'), tt.ko || w.ko, ''], ['日本語', tt.ja || w.ja, 'ja'], ['English', tt.en || w.en, ''], ['Romaji', w.r, '']].filter(x => x[1]);
-  let h = `<div class="shead">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph'}))">` : '<div class="ph"></div>'}
-    <div><h2 class="${S.lang === 'ja' ? 'ja' : ''}">${esc(title(w))}</h2><dl class="tl">${titles.map(([l, v, c]) => `<dt>${l}</dt><dd class="${c}">${esc(v)}</dd>`).join('')}</dl></div></div>
+  let h = `<div class="shead">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="imgFallback(this)">` : '<div class="ph"></div>'}
+    <div><h2 class="${S.lang === 'ja' ? 'ja' : ''}">${titleHTML(w)}</h2><dl class="tl">${titles.map(([l, v, c]) => `<dt>${l}</dt><dd class="${c}">${esc(v)}</dd>`).join('')}</dl></div></div>
     <div class="sacts"><button class="tg w ${m.w ? 'on' : ''}" data-act="w" data-k="${k}">${t('봤음')}</button><button class="tg i ${m.i ? 'on' : ''}" data-act="i" data-k="${k}">${t('관심')}</button></div>
     <div class="sprog">${progCtl(w)}</div>`;
 

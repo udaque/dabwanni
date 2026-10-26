@@ -240,3 +240,4 @@ html{touch-action:manipulation}
 .stscope button{color:var(--sub)}
 .stscope button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .hbars .lab .link{font-size:13px;max-width:9.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom;text-align:left}
+.stag{display:inline-block;vertical-align:.12em;font-size:.68em;font-weight:800;line-height:1;padding:.32em .5em;border-radius:6px;background:var(--chip);color:var(--ink);white-space:nowrap;margin-left:.15em}

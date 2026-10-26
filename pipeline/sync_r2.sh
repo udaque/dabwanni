@@ -19,7 +19,12 @@ case "$1" in
     echo "복원: $(ls raw | wc -l)개 항목" ;;
   push)
     rm -rf .r2 && mkdir .r2
-    for d in raw/*/; do n=$(basename "$d"); tar --zstd -cf ".r2/$n.tar.zst" -C raw "$n"; done
+    for d in raw/*/; do
+      n=$(basename "$d")
+      # 집 PC가 따로 모아 올리는 출처는 여기서 올리지 않음 (도중에 집 PC가 올린 새 판을 옛 판으로 덮어쓰지 않게)
+      case "$n" in syoboi|laftel|animethemes|anitabi) continue ;; esac
+      tar --zstd -cf ".r2/$n.tar.zst" -C raw "$n"
+    done
     cp -f raw/_runs.json raw/_catalog.json .r2/ 2>/dev/null || true
     $S3 sync .r2/ "s3://$R2_BUCKET/raw/"
     echo "보관 완료: $(du -sh .r2 | cut -f1)" ;;

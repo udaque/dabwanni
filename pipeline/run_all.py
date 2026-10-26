@@ -22,7 +22,7 @@ STEPS = [
  ('namu',           ['python3', 'collect_namu.py'], 0.10, 25),
 ]
 # 깃허브 액션 서버에서는 막히는 출처: 집 PC에서 home_syoboi.sh(run_all.py --home)로 따로 돌림
-HOME_ONLY = {'syoboi', 'laftel'}      # 라프텔도 깃허브 서버에서는 403 차단 화면이 와서 집 PC에서
+HOME_ONLY = {'syoboi', 'laftel', 'animethemes', 'anitabi'}      # 깃허브 서버에서는 막히는 출처들(쇼보이·라프텔·애니메테마즈 520·Anitabi 403)이라 집 PC에서
 BUDGETED = {'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
 
 def last_ok(name):

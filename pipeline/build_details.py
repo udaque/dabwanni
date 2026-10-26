@@ -6,7 +6,7 @@
 모든 사람·회사·캐릭터 이름에는 한국어 표기가 들어갑니다. 확인된 표기(나무위키·Wikidata·사전)가 없으면 음역하고 auto 표시를 붙입니다."""
 import os, re, json, shutil, glob, unicodedata
 from common import *
-from names_ko import add_season, station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
+from names_ko import add_season, add_arc, season_code, station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
 from translit import kana_to_hangul, name_to_hangul
 
 COMPANY = re.compile(r'(スタジオ|Studio|STUDIO|作画部|アニメーション|プロダクション|株式会社|動画|工房|ピクチャーズ|フィルム|ワークス|Works|Pictures|Animation|\(株\))')
@@ -229,7 +229,7 @@ def main():
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
         ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'))
-        if ko: ko = add_season(ko, w.get('ja'), w.get('r'))
+        if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):
@@ -317,8 +317,12 @@ def main():
 
         # 회차 — 시즌을 이어서 세는 작품(예: 약사의 혼잣말 3기는 49~60화) 처리
         #   no: 화면에 보이는 회차 번호(이어 센 번호), i: 이 작품 안에서의 순서(1부터). 시청 기록은 i로 저장.
+        tm_n = sorted(int(e['no']) for e in (tm or {}).get('episodes', []) if str(e.get('no', '')).isdigit())
+        tm_abs = bool(tm_n) and tm_n[0] > 1          # TMDB가 시즌 회차를 시리즈 전체 번호(49~60화)로 매긴 경우
         E = w.get('e') or 0
+        if w.get('st') in ('U', 'O', 'H') and len(tm_n) > E: E = len(tm_n)     # 방영 전 자리표시 화수(1화)보다 TMDB 회차 목록이 실제에 가까움
         O = episode_offset(w, E, (sy or {}).get('episodes', []), (jw or {}).get('episodes', []), d.get('relations'), BY)      # d['relations']: [{'k','type'}] 꼴
+        if tm_abs and not ((sy or {}).get('episodes')): O = tm_n[0] - 1
         if O: d['ep_offset'] = O
         def disp(n_local): return str(O + n_local)
         def from_src(no, local):
@@ -335,7 +339,9 @@ def main():
         sy_local = bool(E) and all(int(x['no']) <= E for x in (sy or {}).get('episodes', []) if x['no'].isdigit())
         eps = {}
         for e in (tm or {}).get('episodes', []):
-            no = from_src(e['no'], True); eps[no] = {**e, 'no': no, 'title': dict(e.get('title') or {})}
+            no = from_src(e['no'], not tm_abs)
+            if not in_range(no): continue
+            eps[no] = {**e, 'no': no, 'title': dict(e.get('title') or {})}
         for e in (sy or {}).get('episodes', []):
             no = from_src(e['no'], sy_local)
             if not in_range(no): continue
@@ -404,7 +410,20 @@ def main():
         for c in ('JP', 'US'):
             for v in ((w.get('vod') or {}).get(c) or []):
                 if not any(p['name'] == VOD[v] for p in ott.setdefault(c, [])): ott[c].append({'name': VOD[v]})
-        for c in ott: ott[c] = [{'name': station_ko(p['name']) if p['name'] in STATION_KO_KEYS else p['name']} for p in ott[c]]
+        def ott_base(n):
+            # 광고형 요금제·아마존 채널 경유는 같은 서비스로 봄 (예: 「Netflix Standard with Ads」→ Netflix, 「Crunchyroll Amazon Channel」→ Crunchyroll)
+            if not isinstance(n, str): return n
+            n = re.sub(r'\s+(Standard|Basic)?\s*with Ads$', '', n).strip()
+            n = re.sub(r'\s+Amazon Channel$', '', n).strip()
+            return {'dAnime': 'dアニメストア', 'Amazon Prime Video': 'Prime Video'}.get(n, n)
+        for c in ott:
+            seen, out = set(), []
+            for p in ott[c]:
+                n = ott_base(p['name']); n = station_ko(n) if isinstance(n, str) and n in STATION_KO_KEYS else n
+                key = json.dumps(n, ensure_ascii=False, sort_keys=True) if not isinstance(n, str) else n
+                if key in seen: continue
+                seen.add(key); out.append({**p, 'name': n})
+            ott[c] = out
         lf = laftel_match(w, LAF)
         if lf:
             kr = [p for p in ott.get('KR', []) if 'laftel' not in str(p.get('name')).lower() and '라프텔' not in str(p.get('name'))]
@@ -447,9 +466,12 @@ def main():
     json.dump(nonjp, open(os.path.join(SITE, 'data', 'nonjp.json'), 'w'), separators=(',', ':'))
     # 카탈로그에 한국어 제목·제작사 한국어명 반영
     cp = os.path.join(SITE, 'data', 'catalog.json'); c = json.load(open(cp, encoding='utf-8'))
-    ki, si, ei = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'); n_ko = 0
+    if 'sm' not in c['fields']:
+        c['fields'].append('sm'); [r.append(None) for r in c['rows']]
+    ki, si, ei, smi = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'), c['fields'].index('sm'); n_ko = 0
     for r in c['rows']:
         w = BY[r[0]]
+        r[smi] = season_code(w.get('ja'), w.get('r'), w.get('en'))      # 제목 뒤 시즌·쿨 꼬리표용
         if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
     for s in c['studios']:

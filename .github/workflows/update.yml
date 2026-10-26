@@ -47,7 +47,7 @@ jobs:
 
       - name: 준비
         run: |
-          pip install pykakasi pyarrow
+          pip install pykakasi pyarrow hanja
           sudo apt-get install -y zstd >/dev/null
 
       - name: 수집 원본 복원 (R2)

@@ -225,6 +225,41 @@ def season_mark(ja, romaji=None):
     if not marks and re.search(r'(完結編|最終章|ファイナルシーズン|[Ff]inal [Ss]eason)', t + ' ' + r): marks = ['파이널']
     return ' '.join(marks) or None
 
+def season_code(ja, romaji=None, en=None):
+    """제목 속 시즌·쿨 표시를 짧은 부호로 (예: 第3期 → s3, 3rd Season Part 2 → s3c2, 第2クール → c2, 完結編 → f). 없으면 None.
+    사이트는 이 부호로 제목 뒤에 「3기」 「2쿨」 같은 꼬리표를 붙이고, 제목에서는 그 표시를 뺍니다."""
+    t = unicodedata.normalize('NFKC', ja or ''); r = ' '.join(x for x in (romaji, en) if x)
+    def first(pats):
+        for src in (t, r):
+            for p in pats:
+                m = re.search(p, src)
+                if m and int(m.group(1)) >= 2: return int(m.group(1))
+    s = first([r'第\s*(\d+)\s*期', r'(\d+)\s*期', r'(\d+)(?:st|nd|rd|th)\s*[Ss]eason', r'[Ss]eason\s*(\d+)', r'第\s*(\d+)\s*シーズン'])
+    c = first([r'[第割]\s*(\d+)\s*クール', r'(\d+)\s*クール目', r'[Pp]art\s*(\d+)', r'[Cc]our\s*(\d+)'])
+    b = first([r'第\s*(\d+)\s*部'])
+    out = (f's{s}' if s else '') + (f'b{b}' if b else '') + (f'c{c}' if c else '')
+    if not out and re.search(r'(完結編|最終章|ファイナルシーズン|[Ff]inal [Ss]eason)', t + ' ' + r): out = 'f'
+    return out or None
+
+ARC = re.compile(r'(?:^|[\s　・])([\u4e00-\u9fff々]{1,10}[編篇章])$')
+def add_arc(ko, ja):
+    """원제 끝의 「三天戦争編」 같은 편 이름이 한국어 제목에 없으면, 한자를 한국 한자음으로 읽어 덧붙임 (도쿄 리벤저스 → 도쿄 리벤저스 삼천전쟁편).
+    가나가 섞인 편 이름(「刀鍛冶の里編」 등)은 읽기가 틀리기 쉬워 붙이지 않음."""
+    if not ko or not ja: return ko
+    m = ARC.search(unicodedata.normalize('NFKC', ja).strip())
+    if not m: return ko
+    try: import hanja
+    except ImportError: return ko
+    rd = hanja.translate(m.group(1), 'substitution')
+    if re.search(r'[\u4e00-\u9fff]', rd): return ko
+    # 두음 법칙과 같은 「렬·률 → 열·율」(모음이나 ㄴ 받침 뒤)
+    out = ''
+    for i, ch in enumerate(rd):
+        if ch in '렬률' and i > 0 and '가' <= rd[i - 1] <= '힣' and ((ord(rd[i - 1]) - 0xAC00) % 28) in (0, 4): ch = {'렬': '열', '률': '율'}[ch]
+        out += ch
+    if out in ko.replace(' ', ''): return ko
+    return f'{ko} {out}'
+
 def add_season(ko, ja, romaji=None):
     """한국어 제목에 시즌 표시가 없고 원제에는 있으면 덧붙임 (예: 정반대의 너와 나 + 2기)."""
     if not ko: return ko
