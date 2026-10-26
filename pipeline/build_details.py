@@ -198,7 +198,8 @@ def main():
             pr = prof.get(al_id) or {}
             wd = NM.wd_people_any.get(pname(native or ''), {})
             b = pr.get('dateOfBirth') or {}
-            pf = {'birth': date_ko('-'.join(str(x) for x in (b.get('year'), b.get('month'), b.get('day')) if x) or (wd.get('birth') or '')[:10]),
+            md = f"{b['month']}월 {b['day']}일" if not b.get('year') and b.get('month') and b.get('day') else None    # 연도를 모르면 「4월 23일」 (예전엔 「4년 23월」로 잘못 나옴)
+            pf = {'birth': md or date_ko('-'.join(str(x) for x in (b.get('year'), b.get('month'), b.get('day')) if x) or (wd.get('birth') or '')[:10]),
                   'hometown': place_ko(pr.get('homeTown')), 'jobs': [JOB_KO.get(j, j) for j in pr.get('primaryOccupations') or []] or None,
                   # 일본어·영어 화면용 원래 값 (생일은 YYYY-MM-DD, 출신지는 AniList 원문)
                   'birth_iso': '-'.join(f'{x:02d}' if i else str(x) for i, x in enumerate((b.get('year'), b.get('month'), b.get('day'))) if x) or (wd.get('birth') or '')[:10] or None,
@@ -226,6 +227,14 @@ def main():
         nonlocal made
         k = w['k']
         al, sy, at, tm, jw, mu, ab = (load(s, k) for s in ('anilist', 'syoboi', 'animethemes', 'tmdb', 'jawiki', 'music', 'anitabi'))
+        _t = (al or {}).get('title') or {}
+        w['_alt'] = ' '.join(x for x in (_t.get('romaji'), _t.get('english')) if x)      # 시즌 꼬리표 판별용 (예: Kusuriya no Hitorigoto 2nd Season)
+        # TMDB 회차가 다른 시즌 것이면(예: 3기 작품에 1기 회차가 붙음) 이 작품 방영 시작보다 한참 앞선 회차는 버림
+        tm_eps = (tm or {}).get('episodes', [])
+        if tm_eps and w.get('y') and w.get('q') and any(e.get('air') for e in tm_eps):
+            sm_ = (w['q'] - 1) * 3 + 1
+            start = f"{w['y'] - (1 if sm_ == 1 else 0)}-{(sm_ - 2) % 12 + 1:02d}-01"      # 시작 분기 한 달 전부터
+            tm_eps = [e for e in tm_eps if not e.get('air') or e['air'] >= start]
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
         ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'))
@@ -317,7 +326,7 @@ def main():
 
         # 회차 — 시즌을 이어서 세는 작품(예: 약사의 혼잣말 3기는 49~60화) 처리
         #   no: 화면에 보이는 회차 번호(이어 센 번호), i: 이 작품 안에서의 순서(1부터). 시청 기록은 i로 저장.
-        tm_n = sorted(int(e['no']) for e in (tm or {}).get('episodes', []) if str(e.get('no', '')).isdigit())
+        tm_n = sorted(int(e['no']) for e in tm_eps if str(e.get('no', '')).isdigit())
         tm_abs = bool(tm_n) and tm_n[0] > 1          # TMDB가 시즌 회차를 시리즈 전체 번호(49~60화)로 매긴 경우
         E = w.get('e') or 0
         if w.get('st') in ('U', 'O', 'H') and len(tm_n) > E: E = len(tm_n)     # 방영 전 자리표시 화수(1화)보다 TMDB 회차 목록이 실제에 가까움
@@ -338,7 +347,7 @@ def main():
             for rec in al_ep_recs: rec['eps'] = [disp(int(x)) if x.isdigit() else x for x in rec['eps']]
         sy_local = bool(E) and all(int(x['no']) <= E for x in (sy or {}).get('episodes', []) if x['no'].isdigit())
         eps = {}
-        for e in (tm or {}).get('episodes', []):
+        for e in tm_eps:
             no = from_src(e['no'], not tm_abs)
             if not in_range(no): continue
             eps[no] = {**e, 'no': no, 'title': dict(e.get('title') or {})}
@@ -471,7 +480,7 @@ def main():
     ki, si, ei, smi = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'), c['fields'].index('sm'); n_ko = 0
     for r in c['rows']:
         w = BY[r[0]]
-        r[smi] = season_code(w.get('ja'), w.get('r'), w.get('en'))      # 제목 뒤 시즌·쿨 꼬리표용
+        r[smi] = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x))      # 제목 뒤 시즌·쿨 꼬리표용
         if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
     for s in c['studios']:

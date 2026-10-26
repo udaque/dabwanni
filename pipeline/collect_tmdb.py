@@ -43,7 +43,10 @@ if __name__ == '__main__':
         return cache[tv]
     def work(w, run):
         http.run = run
-        if not needs('tmdb', w, fresh_days=7, airing_days=3): return SKIP
+        old = load('tmdb', w['k']) or {}
+        # 예전엔 매핑 목록의 시즌 번호를 그대로 써서 속편에 1기 회차가 붙은 경우가 있어, 시즌을 다시 고른 적 없는 최근 작품은 한 번 다시 받음
+        redo = (w.get('y') or 0) >= 2015 and w.get('ty') in ('T', 'O') and old and 'sp' not in old
+        if not redo and not needs('tmdb', w, fresh_days=7, airing_days=3): return SKIP
         ko = show(w['tmdb'])
         prov = (ko.get('watch/providers') or {}).get('results', {})
         rec = {'tv': w['tmdb'], 'ott': {c: [{'name': p['provider_name']} for p in (prov.get(c) or {}).get('flatrate', [])] for c in ('KR', 'JP', 'US')},
@@ -51,6 +54,13 @@ if __name__ == '__main__':
         tr = {t['iso_639_1']: (t.get('data') or {}).get('name') for t in (ko.get('translations') or {}).get('translations', [])}
         rec['titles'] = {'ko': tr.get('ko') or None, 'en': tr.get('en') or None, 'ja': tr.get('ja') or ko.get('original_name')}
         s = w.get('tms')
+        # 방영 시작 분기에 시작한 TMDB 시즌이 딱 하나면 그 시즌을 씀 (매핑 목록의 시즌 번호가 틀린 속편 대비)
+        if w.get('y') and w.get('q') and w['ty'] in ('T', 'O'):
+            m0 = w['y'] * 12 + (w['q'] - 1) * 3
+            cand = [x['season_number'] for x in ko.get('seasons') or [] if (x.get('season_number') or 0) > 0 and x.get('air_date')
+                    and m0 - 1 <= int(x['air_date'][:4]) * 12 + int(x['air_date'][5:7]) - 1 <= m0 + 3]
+            if len(cand) == 1: s = cand[0]
+        rec['sp'] = s
         if s is not None and w['ty'] in ('T', 'O'):
             eps = {}
             for lang in ('ko-KR', 'ja-JP', 'en-US'):

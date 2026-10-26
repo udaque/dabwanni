@@ -50,7 +50,7 @@ const SEASON_RE = [
 const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-ka Project|TBA|Working Title|続編|新作|新シリーズ|仮|仮題|仮称|新アニメ化プロジェクト|新アニメ|アニメ化決定)\s*[\)）]/gi;
 function bareTitle(s, w){
   if (!s) return s;
-  let x = s.replace(PLACEHOLDER, '');
+  let x = s.replace(PLACEHOLDER, '').replace(/\s*[\(（](19|20)\d\d[\)）]/g, '');      // 「薬屋のひとりごと (2025)」처럼 붙은 연도도 뺌
   if (w.sm) SEASON_RE.forEach(re => x = x.replace(re, ''));
   return x.replace(/\s*[\(（]\s*[\)）]/g, '').trim() || s;
 }
@@ -267,7 +267,8 @@ function renderStats(){
   }
   const G = [...grp].sort((x, y) => y[1].o - x[1].o), gmax = Math.max(1, ...G.map(([, g]) => g.w + g.g + g.i));
 
-  const count = (arr, f) => { const c = new Map(); arr.forEach(x => new Set(f(x)).forEach(k => k && c.set(k, (c.get(k) || 0) + 1))); return [...c].sort((p, q) => q[1] - p[1]); };
+  const stOf = m => m.w ? 'w' : m.ep ? 'g' : 'i';            // 봤음 빨강 · 보는 중 노랑 · 관심만 초록
+  const count = (arr, f) => { const c = new Map(); arr.forEach(x => new Set(f(x)).forEach(k => { if (!k) return; const o = c.get(k) || {w: 0, g: 0, i: 0, n: 0}; o[stOf(x[1])]++; o.n++; c.set(k, o); })); return [...c].sort((p, q) => q[1].n - p[1].n); };
   // 봤음 기준 (옵션으로 보는 중·관심만 포함)
   const B = L.filter(([, m]) => m.w || (SCOPE.g && m.ep && !m.w) || (SCOPE.i && m.i && !m.w && !m.ep));
   const byType = count(B, ([w]) => [t(TYPE[w.ty])]);
@@ -279,17 +280,13 @@ function renderStats(){
   const ratedL = L.filter(([, m]) => m.rate), rates = [1, 2, 3, 4, 5].map(n => ratedL.filter(([, m]) => m.rate === n).length);
   const avgRate = ratedL.length ? ratedL.reduce((s, [, m]) => s + m.rate, 0) / ratedL.length : 0;
 
-  // 최근 12개월 다 본 작품 수
-  const now = new Date(), months = [];
-  for (let i = 11; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push([`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, d.getMonth() + 1, 0]); }
-  watched.forEach(([, m]) => { const x = months.find(z => z[0] === (m.end || '').slice(0, 7)); if (x) x[2]++; });
-  const mmax = Math.max(1, ...months.map(x => x[2]));
 
   const prog = watching.map(([w, m]) => total(w) ? m.ep / total(w) : null).filter(x => x != null);
   const avgProg = prog.length ? prog.reduce((s, x) => s + x, 0) / prog.length : null;
   const short = s => s.length > 12 ? s.slice(0, 12) + '…' : s;
 
-  const one = (title_, rows, max, cls) => rows.length ? `<div class="stbox"><h2>${title_}</h2><div class="hbars">${rows.map(([k, n]) => hbarRow(esc(k), [[cls, n]], max, n)).join('')}</div></div>` : '';
+  const one = (title_, rows) => { if (!rows.length) return ''; const mx = Math.max(1, ...rows.map(x => x[1].n));
+    return `<div class="stbox"><h2>${title_}</h2><div class="hbars">${rows.map(([k, o]) => hbarRow(esc(k), [['w', o.w], ['g', o.g], ['i', o.i]], mx, o.n)).join('')}</div></div>`; };
   let h = `<div class="stbox"><h2>${t('내 기록')}</h2><div class="kpis">
       <div class="kpi"><div class="lb"><span class="dot w"></span>${t('봤음')}</div><div class="v">${fmtN(watched.length)}</div></div>
       <div class="kpi"><div class="lb"><span class="dot g"></span>${t('보는 중')}</div><div class="v">${fmtN(watching.length)}</div></div>
@@ -304,15 +301,14 @@ function renderStats(){
       <div class="stseg" id="stBy"><button data-by="q" class="${statsBy === 'q' ? 'on' : ''}">${t('분기별')}</button><button data-by="y" class="${statsBy === 'y' ? 'on' : ''}">${t('연도별')}</button></div>
       <div class="legend3"><span><i class="dot w"></i>${t('봤음')}</span><span><i class="dot g"></i>${t('보는 중')}</span><span><i class="dot i"></i>${t('관심만')}</span></div>
       <div class="hbars tight">${G.map(([k, g]) => hbarRow(esc(k), [['w', g.w], ['g', g.g], ['i', g.i]], gmax, g.w + g.g + g.i)).join('')}</div></div>`;
-  h += `<div class="stbox"><h2>${t('최근 12개월 다 본 작품')}</h2><div class="vbars">${months.map(([, mo, n]) => `<div class="c"><em>${n || ''}</em><b style="height:${(n / mmax * 100).toFixed(1)}%;${n ? '' : 'min-height:2px;opacity:.25'}"></b><span>${F('month', mo)}</span></div>`).join('')}</div></div>`;
   if (avgProg != null) h += `<div class="stbox"><h2>${t('보는 중 진행률')}<span class="pill">${t('평균')} ${Math.round(avgProg * 100)}%</span></h2><div class="hbars">${watching.filter(([w]) => total(w)).sort((p, q) => q[1].ep / total(q[0]) - p[1].ep / total(p[0])).slice(0, 8).map(([w, m]) => hbarRow(esc(short(title(w))), [['g', m.ep]], total(w), m.ep).replace(`<span class="num">${fmtN(m.ep)}</span>`, `<span class="num">${m.ep}/${total(w)}</span>`)).join('')}</div></div>`;
   h += `<div class="stscope" id="stScope"><span class="stbase"><i class="dot w"></i>${t('봤음')}</span>
       <button data-sc="g" class="${SCOPE.g ? 'on' : ''}"><i class="dot g"></i>${t('보는 중')}</button>
       <button data-sc="i" class="${SCOPE.i ? 'on' : ''}"><i class="dot i"></i>${t('관심만')}</button><span class="pill">${fmtN(B.length)}</span></div>`;
-  h += one(t('형식별'), byType, Math.max(1, ...byType.map(x => x[1])), 'w');
-  h += one(t('방영 연대별'), byDecade, Math.max(1, ...byDecade.map(x => x[1])), 'w');
-  h += one(t('많이 본 장르·태그'), byTag, Math.max(1, ...byTag.map(x => x[1])), 'w');
-  h += one(t('많이 본 제작사'), byStudio, Math.max(1, ...byStudio.map(x => x[1])), 'w');
+  h += one(t('형식별'), byType);
+  h += one(t('방영 연대별'), byDecade);
+  h += one(t('많이 본 장르·태그'), byTag);
+  h += one(t('많이 본 제작사'), byStudio);
   h += `<div id="stPeople">${B.length ? `<div class="stbox"><p class="stempty">${t('불러오는 중')}</p></div>` : ''}</div>`;
   $('#stats').innerHTML = h;
   $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
@@ -321,27 +317,56 @@ function renderStats(){
 }
 
 // 감독·성우·음악 등: 기준 작품들의 상세를 불러와 사람별로 몇 작품에 참여했는지 셈
+const VA_ROLE = Object.assign({MAIN: true, SUPPORTING: true, BACKGROUND: false}, store.get('vaRole', {}));   // 성우 통계에 넣을 배역 구분
+let lastB = null;
 async function peopleStats(B, tok){
+  lastB = B;
   const ds = await Promise.all(B.map(([w]) => item('detail', w.k)));
   if (tok !== statsTok || !$('#stPeople')) return;
+  const stOf = m => m.w ? 'w' : m.ep ? 'g' : 'i';
+  // 각 묶음: 작품 하나에서 [사람, 배역 정보] 목록을 뽑음
   const groups = [
-    ['많이 본 감독', d => (d.staff || []).filter(s => s.role === '감독' || s.role === '총감독').flatMap(s => s.people)],
-    ['많이 본 성우', d => (d.characters || []).flatMap(c => (c.cast || []).filter(v => !v.lang || v.lang === 'ja'))],
-    ['많이 본 음악 담당', d => (d.staff || []).filter(s => s.role === '음악').flatMap(s => s.people)],
-    ['많이 들은 주제가 가수', d => (d.songs || []).flatMap(s => (s.credits || []).filter(c => c.role === '歌'))],
-    ['많이 본 각본가', d => (d.staff || []).filter(s => s.role === '시리즈 구성' || s.role === '각본').flatMap(s => s.people)],
-    ['많이 본 캐릭터 디자이너', d => (d.staff || []).filter(s => s.role === '캐릭터 디자인').flatMap(s => s.people)],
+    ['많이 본 감독', d => (d.staff || []).filter(s => s.role === '감독' || s.role === '총감독').flatMap(s => s.people.map(p => [p]))],
+    ['많이 본 성우', d => (d.characters || []).filter(c => VA_ROLE[c.role] ?? true).flatMap(c => (c.cast || []).filter(v => !v.lang || v.lang === 'ja').map(v => [v, c]))],
+    ['많이 본 음악 담당', d => (d.staff || []).filter(s => s.role === '음악').flatMap(s => s.people.map(p => [p]))],
+    ['많이 들은 주제가 가수', d => (d.songs || []).flatMap(s => (s.credits || []).filter(c => c.role === '歌').map(c => [c]))],
+    ['많이 본 각본가', d => (d.staff || []).filter(s => s.role === '시리즈 구성' || s.role === '각본').flatMap(s => s.people.map(p => [p]))],
+    ['많이 본 캐릭터 디자이너', d => (d.staff || []).filter(s => s.role === '캐릭터 디자인').flatMap(s => s.people.map(p => [p]))],
   ];
   let h = '';
   for (const [name, pick] of groups) {
-    const c = new Map(), ref = new Map();
-    ds.forEach(d => { if (!d) return; new Set(pick(d).filter(p => p && p.pid).map(p => { ref.set(p.pid, p); return p.pid; })).forEach(id => c.set(id, (c.get(id) || 0) + 1)); });
-    const rows = [...c].sort((p, q) => q[1] - p[1]).slice(0, 10);
-    if (!rows.length) continue;
-    const mx = rows[0][1];
-    h += `<div class="stbox"><h2>${t(name)}</h2><div class="hbars">${rows.map(([id, n]) => hbarRow(pLink(ref.get(id)), [['w', n]], mx, n)).join('')}</div></div>`;
+    const c = new Map(), ref = new Map(), roles = new Map();
+    ds.forEach((d, n) => {
+      if (!d) return;
+      const [w, m] = B[n], st = stOf(m), seen = new Set();
+      for (const [p, ch] of pick(d)) {
+        if (!p || !p.pid) continue;
+        ref.set(p.pid, p);
+        if (ch) (roles.get(p.pid) || roles.set(p.pid, []).get(p.pid)).push({w, ch, st});
+        if (seen.has(p.pid)) continue;
+        seen.add(p.pid);
+        const o = c.get(p.pid) || {w: 0, g: 0, i: 0, n: 0}; o[st]++; o.n++; c.set(p.pid, o);
+      }
+    });
+    const rows = [...c].sort((p, q) => q[1].n - p[1].n).slice(0, 10);
+    const va = name === '많이 본 성우';
+    if (!rows.length && !va) continue;
+    const mx = Math.max(1, ...rows.map(x => x[1].n));
+    const filt = va ? `<div class="stseg vafilt">${['MAIN', 'SUPPORTING', 'BACKGROUND'].map(r => `<button data-var="${r}" class="${VA_ROLE[r] ? 'on' : ''}">${t(ROLE[r])}</button>`).join('')}</div>` : '';
+    h += `<div class="stbox"><h2>${t(name)}</h2>${filt}<div class="hbars">${rows.map(([id, o]) => {
+      const row = hbarRow(pLink(ref.get(id)), [['w', o.w], ['g', o.g], ['i', o.i]], mx, o.n);
+      if (!va) return row;
+      const list = (roles.get(id) || []).map(x => `<div class="varow"><i class="dot ${x.st}"></i><b>${nm(x.ch.name, {short: true})}</b> <span class="pill">${t(ROLE[x.ch.role] || '')}</span><button class="link" data-act="open" data-k="${esc(x.w.k)}">${titleHTML(x.w)}</button></div>`).join('');
+      return row.replace('<span class="bar">', `<span class="bar" data-vatog="${esc(id)}" role="button" tabindex="0">`) + `<div class="valist" data-valist="${esc(id)}" hidden>${list}</div>`;
+    }).join('')}</div></div>`;
   }
   $('#stPeople').innerHTML = h;
+  $('#stPeople').onclick = e => {
+    const f = e.target.closest('[data-var]');
+    if (f) { VA_ROLE[f.dataset.var] = !VA_ROLE[f.dataset.var]; store.set('vaRole', VA_ROLE); peopleStats(lastB, ++statsTok); return; }
+    const b = e.target.closest('[data-vatog]');
+    if (b) { const L = $('#stPeople').querySelector(`[data-valist="${CSS.escape(b.dataset.vatog)}"]`); if (L) L.hidden = !L.hidden; }
+  };
 }
 
 /* ---------- 연도·분기 고르기 ---------- */
@@ -641,7 +666,8 @@ async function openPerson(id){
   const n = p.name, pf = p.profile || {};
   let h = `<div class="shead" style="grid-template-columns:${pf.image ? '84px ' : ''}1fr">${pf.image ? `<img class="pf" src="${esc(pf.image)}" alt="" referrerpolicy="no-referrer">` : ''}<div><h2>${nm({...n, ja: null})}</h2><div class="s" style="color:var(--sub)">${esc([n.ja, n.en].filter(Boolean).join(' / '))}</div></div></div>`;
   const ko = S.lang === 'ko', bd = (pf.birth_iso || '').split('-').map(Number);
-  const birth = ko || !pf.birth_iso ? pf.birth : S.lang === 'ja' ? (bd.length === 3 ? `${bd[0]}年${bd[1]}月${bd[2]}日` : bd.length === 2 ? `${bd[0]}月${bd[1]}日` : `${bd[0]}年`)
+  // birth_iso는 「1990-09-27」 또는 연도를 모르면 「09-27」
+  const birth = !pf.birth_iso ? pf.birth : ko ? (bd.length === 3 ? `${bd[0]}년 ${bd[1]}월 ${bd[2]}일` : bd.length === 2 ? `${bd[0]}월 ${bd[1]}일` : `${bd[0]}년`) : S.lang === 'ja' ? (bd.length === 3 ? `${bd[0]}年${bd[1]}月${bd[2]}日` : bd.length === 2 ? `${bd[0]}月${bd[1]}日` : `${bd[0]}年`)
     : bd.length === 3 ? `${FMT.month.en(bd[1])} ${bd[2]}, ${bd[0]}` : bd.length === 2 ? `${FMT.month.en(bd[0])} ${bd[1]}` : `${bd[0]}`;
   const info = [['생년월일', birth], ['출신지', ko ? pf.hometown : pf.hometown_raw || pf.hometown], ['소속사', ko ? pf.agency : pf.agency_ja || pf.agency],
     ['활동 분야', (pf.jobs || []).map(t).join(', ')], ['활동 연도', (pf.years || []).join(' ~ ')]].filter(x => x[1]).map(([a, b]) => [a, esc(b)]);
