@@ -82,7 +82,7 @@ const I18N = {
   '관련 작품': ['関連作品', 'Related'], '연결된 작품이 없습니다.': ['関連作品はありません。', 'No related titles.'],
   '다음 시즌': ['続編', 'Sequel'], '이전 시즌': ['前作', 'Prequel'], '외전': ['外伝', 'Side story'], '본편': ['本編', 'Parent'], '스핀오프': ['スピンオフ', 'Spin-off'],
   '다른 버전': ['別バージョン', 'Alternative'], '총집편': ['総集編', 'Recap'], '캐릭터 공유': ['キャラクター共通', 'Shared characters'], '포함': ['収録', 'Contains'], '기타': ['その他', 'Other'],
-  '외부 링크': ['外部リンク', 'External links'], '쇼보이 캘린더': ['しょぼいカレンダー', 'Syoboi Calendar'],
+  '영상': ['映像', 'Videos'], '외부 링크': ['外部リンク', 'External links'], '쇼보이 캘린더': ['しょぼいカレンダー', 'Syoboi Calendar'],
   '점선 밑줄은 공식 한국어 표기를 찾지 못해 자동으로 옮긴 이름이라 읽는 법이 틀릴 수 있습니다.': ['', ''],
   // 인물·제작사
   '불러오는 중': ['読み込み中', 'Loading'], '인물 정보 없음': ['人物情報なし', 'No information'],
@@ -113,6 +113,10 @@ const I18N = {
   'CG 감독': ['CGディレクター', 'CG director'], '제작위원회': ['製作', 'Production committee'], '주제가': ['主題歌', 'Theme song'], '주제가 작사': ['主題歌作詞', 'Theme song lyrics'],
   '주제가 작곡': ['主題歌作曲', 'Theme song composition'], '주제가 편곡': ['主題歌編曲', 'Theme song arrangement'], '소품 디자인': ['プロップデザイン', 'Prop design'],
   '배경': ['背景', 'Background art'], '효과음': ['効果', 'Sound effects'], '촬영': ['撮影', 'Compositing'], '색 지정': ['色指定', 'Color coordination'],
+  '서브 캐릭터 디자인': ['サブキャラクターデザイン', 'Sub character design'], '디자인 보조': ['デザイン協力', 'Design assistance'], '캐릭터 디자인 보조': ['キャラクターデザイン協力', 'Character design assistance'],
+  '몬스터 디자인': ['モンスターデザイン', 'Monster design'], '크리처 디자인': ['クリーチャーデザイン', 'Creature design'], '의상 디자인': ['衣装デザイン', 'Costume design'],
+  '무기 디자인': ['武器デザイン', 'Weapon design'], '콘셉트 아트': ['コンセプトアート', 'Concept art'], '콘셉트 디자인': ['コンセプトデザイン', 'Concept design'],
+  '타이틀 로고 디자인': ['タイトルロゴデザイン', 'Title logo design'], '작화감독 보좌': ['作画監督補佐', 'Assistant animation director'], '디자이너': ['デザイナー', 'Designer'],
   // 직업
   '성우': ['声優', 'Voice actor'], '배우': ['俳優', 'Actor'], '애니메이터': ['アニメーター', 'Animator'], '음악가': ['ミュージシャン', 'Musician'], '가수': ['歌手', 'Singer'],
   '작곡가': ['作曲家', 'Composer'], '작사가': ['作詞家', 'Lyricist'], '편곡가': ['編曲家', 'Arranger'], '일러스트레이터': ['イラストレーター', 'Illustrator'], '만화가': ['漫画家', 'Mangaka'],

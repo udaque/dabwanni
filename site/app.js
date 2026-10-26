@@ -52,7 +52,11 @@ const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-k
 function bareTitle(s, w){
   if (!s) return s;
   let x = s.replace(PLACEHOLDER, '').replace(/\s*[\(（](19|20)\d\d[\)）]/g, '');      // 「薬屋のひとりごと (2025)」처럼 붙은 연도도 뺌
-  if (w.sm) SEASON_RE.forEach(re => x = x.replace(re, ''));
+  if (w.sm) {
+    SEASON_RE.forEach(re => x = x.replace(re, ''));
+    const sn = (w.sm.match(/s(\d+)/) || [])[1];
+    if (sn) x = x.replace(new RegExp('\\s+' + sn + '$'), '');      // 「薬屋のひとりごと 3」처럼 끝에 시즌 번호만 붙은 경우
+  }
   return x.replace(/\s*[\(（]\s*[\)）]/g, '').trim() || s;
 }
 function seasonTags(w){
@@ -213,6 +217,11 @@ function onClick(e){
     if (act === 'open') { location.hash = '#/w/' + encodeURIComponent(k); return; }
     if (act === 'person') { location.hash = '#/p/' + encodeURIComponent(el.dataset.p); return; }
     if (act === 'studio') { location.hash = '#/s/' + encodeURIComponent(el.dataset.s); return; }
+    if (act === 'yt') {
+      const f = Object.assign(document.createElement('iframe'), {src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(el.dataset.yt)}?autoplay=1&playsinline=1&rel=0`,
+        allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowFullscreen: true, className: 'ytframe', title: el.getAttribute('aria-label') || 'YouTube'});
+      el.replaceWith(f); return;
+    }
     if (act === 'wscope') { WSCOPE[el.dataset.v] = !WSCOPE[el.dataset.v]; store.set('wantScope', WSCOPE); S.shown = PAGE; render(); return; }
     if (act === 'type' || act === 'len') { const set = act === 'type' ? S.types : S.lens, v = el.dataset.v; set.has(v) ? set.delete(v) : set.add(v); S.shown = PAGE; render(); return; }
     if (act === 'more') { S.shown += PAGE * 2; render(); return; }
@@ -240,7 +249,9 @@ function fmtDHM(min){
   min = Math.round(min); const d = Math.floor(min / 1440), h = Math.floor(min % 1440 / 60), m = min % 60, u = UL();
   return `${d ? `${fmtN(d)}<small>${u.d}</small> ` : ''}${d || h ? `${h}<small>${u.h}</small> ` : ''}${m}<small>${u.m}</small>`;
 }
-const hbarRow = (label, parts, max, total) => `<span class="lab">${label}</span><span class="bar">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / max * 100).toFixed(2)}%"></i>` : '').join('')}</span><span class="num">${fmtN(total)}</span>`;
+// 막대: 채운 부분 전체를 둥근 끝으로 감싸고 그 안을 상태별 색으로 나눔 (색이 여럿이어도 오른쪽 끝이 둥글게)
+const hbarRow = (label, parts, max, total) => { const sum = parts.reduce((s, [, n]) => s + n, 0) || 1;
+  return `<span class="lab">${label}</span><span class="bar"><span class="fill" style="width:${(sum / max * 100).toFixed(2)}%">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / sum * 100).toFixed(2)}%"></i>` : '').join('')}</span></span><span class="num">${fmtN(total)}</span>`; };
 let statsBy = 'q', statsTok = 0, dropN = 0;
 // 막대를 누르면 그 아래에 해당 작품들이 펼쳐짐 (상태 색 점 + 제목, 필요하면 덧붙임 말)
 const stDot = m => m.w ? 'w' : m.ep ? 'g' : 'i';
@@ -337,7 +348,7 @@ const VA_ROLE = Object.assign({MAIN: true, SUPPORTING: true, BACKGROUND: false},
 let lastB = null;
 async function peopleStats(B, tok){
   lastB = B;
-  const ds = await Promise.all(B.map(([w]) => item('detail', w.k)));
+  const ds = await Promise.all(B.map(([w]) => item('detail', w.k).catch(() => null)));   // 한 묶음 파일을 못 받아도 나머지로 계속 (예전엔 「불러오는 중」에서 멈춤)
   if (tok !== statsTok || !$('#stPeople')) return;
   const stOf = m => m.w ? 'w' : m.ep ? 'g' : 'i';
   // 각 묶음: 작품 하나에서 [사람, 배역 정보] 목록을 뽑음
@@ -608,7 +619,12 @@ function workHTML(w, d){
   ]));
 
   // 링크
-  const links = [...(d?.links || []).map(l => [t(LINK_KO[l.site]) || l.site, l.url]), ...(d?.pv ? [[t('PV 영상'), d.pv]] : []), ...(!d?.links && w.site ? [[t('공식 사이트'), w.site]] : [])];
+  // 공식 채널 유튜브 영상: 미리보기 그림만 먼저 보이고, 누르면 그 자리에서 재생
+  const yt = d?.yt || {}, vids = [...(yt.pv ? [['PV', yt.pv]] : []), ...(yt.op || []).map((v, i, a) => [t('오프닝') + (a.length > 1 ? ' ' + (i + 1) : ''), v]),
+    ...(yt.ed || []).map((v, i, a) => [t('엔딩') + (a.length > 1 ? ' ' + (i + 1) : ''), v])];
+  if (vids.length) h += sec('영상', `<div class="ytlist">${vids.map(([lb, v]) => `<button class="yt" data-act="yt" data-yt="${esc(v)}" aria-label="${esc(lb)}">
+      <img loading="lazy" src="https://i.ytimg.com/vi/${esc(v)}/hqdefault.jpg" alt="" onerror="this.style.visibility='hidden'"><span class="ytlab">${esc(lb)}</span><span class="ytplay" aria-hidden="true"></span></button>`).join('')}</div>`, vids.length);
+  const links = [...(d?.links || []).map(l => [t(LINK_KO[l.site]) || l.site, l.url]), ...(d?.pv && !yt.pv ? [[t('PV 영상'), d.pv]] : []), ...(!d?.links && w.site ? [[t('공식 사이트'), w.site]] : [])];
   if (links.length) h += sec('공식 링크', `<div class="rows">${links.map(([n, u]) => `<div class="row"><a class="link" href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a></div>`).join('')}</div>`);
 
   // 제작사

@@ -38,6 +38,9 @@ class Names:
              and not re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', t)]   # 예전 색인에 든 하위·목록 문서 제목은 버림
         if not_work:      # 인물·회사 이름을 찾을 때는 작품 문서 제목(예: 「5등분의 신부」)을 버림
             c = [t for t in c if nko(strip_disambig(t)) not in self.work_titles and not re.search(r'\d', t)]
+            # 사람 이름처럼 생긴 문서만: 로마자가 섞였거나(「너스위치 코무기짱 R」) 네 낱말이 넘으면 작품·단체 문서로 봄
+            if prefer and '성우' in prefer:
+                c = [t for t in c if not re.search(r'[A-Za-z]', strip_disambig(t)) and len(strip_disambig(t).split()) <= 4]
         if prefer:
             for t in c:
                 if any(p and p in t for p in prefer): return strip_disambig(t)
@@ -282,6 +285,9 @@ def main():
                 if al.get(f): d[f] = al[f]
             if al.get('isAdult'): d['adult'] = True
             if (al.get('trailer') or {}).get('site') == 'youtube': d['pv'] = 'https://www.youtube.com/watch?v=' + al['trailer']['id']
+        yt = load('youtube', k)
+        if yt and (yt.get('pv') or yt.get('op') or yt.get('ed')):
+            d['yt'] = {x: yt[x] for x in ('pv', 'op', 'ed') if yt.get(x)}        # 공식 채널 유튜브 영상 (상세 화면에 바로 재생)
             d['links'] = [{'site': l['site'], 'url': l['url']} for l in al.get('externalLinks') or [] if l.get('type') in ('INFO', 'SOCIAL')]
             d['relations'] = [{'k': 'a' + str(e['node']['id']), 'type': e['relationType']} for e in (al.get('relations') or {}).get('edges', []) if ('a' + str(e['node']['id'])) in BY]
         if w.get('site') and not any(l['site'] == 'Official Site' for l in d.get('links', [])): d.setdefault('links', []).insert(0, {'site': 'Official Site', 'url': w['site']})

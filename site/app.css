@@ -249,3 +249,12 @@ html{touch-action:manipulation}
 .varow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
 .varow .link{font-size:13px;text-align:left}
 .wscope{width:100%;margin:0 0 4px}
+.hbars .bar .fill{display:flex;height:100%;border-radius:inherit;overflow:hidden;min-width:0}
+/* 공식 유튜브 영상 */
+.ytlist{display:grid;gap:10px}
+.yt{position:relative;display:block;width:100%;aspect-ratio:16/9;border:0;padding:0;border-radius:12px;overflow:hidden;background:#000;cursor:pointer}
+.yt img{width:100%;height:100%;object-fit:cover;display:block;opacity:.92}
+.ytlab{position:absolute;left:10px;top:10px;padding:4px 9px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-size:13px;font-weight:800;white-space:nowrap}
+.ytplay{position:absolute;left:50%;top:50%;width:64px;height:44px;margin:-22px 0 0 -32px;border-radius:12px;background:rgba(229,9,20,.92)}
+.ytplay::after{content:"";position:absolute;left:26px;top:13px;border-left:16px solid #fff;border-top:9px solid transparent;border-bottom:9px solid transparent}
+.ytframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:12px;background:#000}

@@ -127,6 +127,9 @@ import hashlib
 def studio_sid(name): return 's' + hashlib.sha1(studio_key(name).encode()).hexdigest()[:10]
 
 ROLE_KO = {  # 일본어·영어 직책 → 한국어
+ 'Sub Character Design': '서브 캐릭터 디자인', 'Design Assistance': '디자인 보조', 'Character Design Assistance': '캐릭터 디자인 보조',
+ 'Monster Design': '몬스터 디자인', 'Creature Design': '크리처 디자인', 'Costume Design': '의상 디자인', 'Weapon Design': '무기 디자인',
+ 'Concept Art': '콘셉트 아트', 'Concept Design': '콘셉트 디자인', 'Title Logo Design': '타이틀 로고 디자인', 'Assistant Animation Director': '작화감독 보좌',
  '原作': '원작', 'Original Creator': '원작', 'Original Story': '원작', '監督': '감독', 'Director': '감독', '総監督': '총감독', 'Chief Director': '총감독',
  '副監督': '부감독', 'Assistant Director': '부감독', 'シリーズ構成': '시리즈 구성', 'Series Composition': '시리즈 구성', '脚本': '각본', 'Script': '각본',
  'Screenplay': '각본', 'キャラクターデザイン': '캐릭터 디자인', 'Character Design': '캐릭터 디자인', 'キャラクター原案': '캐릭터 원안', 'Original Character Design': '캐릭터 원안',
@@ -177,7 +180,7 @@ STATION_KO = {'NHK総合': 'NHK 종합', 'NHK Eテレ': 'NHK E테레', 'NHK教�
  'Apple TV Plus': '애플 TV+', 'Apple TV+': '애플 TV+', 'Laftel': '라프텔', 'Crunchyroll Amazon Channel': '크런치롤', 'Netflix basic with Ads': '넷플릭스(광고형)'}
 def station_ko(n): return {'ko': STATION_KO.get(n) or ja_company(n), 'ja': n} if STATION_KO.get(n) else {'ko': ja_company(n) if re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', n) else n, 'ja': n, 'auto': 1}
 
-JOB_KO = {'Scriptwriter': '각본가', 'Screenwriter': '각본가', 'Writer': '작가', 'Storyboard Artist': '콘티 작가', 'Voice Actor': '성우', 'Voice Actress': '성우', 'Actor': '배우', 'Actress': '배우', 'Director': '감독', 'Animator': '애니메이터', 'Musician': '음악가',
+JOB_KO = {'Designer': '디자이너', 'Character Designer': '캐릭터 디자이너', 'Scriptwriter': '각본가', 'Screenwriter': '각본가', 'Writer': '작가', 'Storyboard Artist': '콘티 작가', 'Voice Actor': '성우', 'Voice Actress': '성우', 'Actor': '배우', 'Actress': '배우', 'Director': '감독', 'Animator': '애니메이터', 'Musician': '음악가',
  'Singer': '가수', 'Composer': '작곡가', 'Lyricist': '작사가', 'Arranger': '편곡가', 'Illustrator': '일러스트레이터', 'Mangaka': '만화가', 'Manga Artist': '만화가',
  'Screenwriter': '각본가', 'Writer': '작가', 'Novelist': '소설가', 'Producer': '프로듀서', 'Character Designer': '캐릭터 디자이너', 'Storyboard Artist': '콘티 작가',
  'Art Director': '미술감독', 'Sound Director': '음향감독', 'Narrator': '내레이터', 'Seiyuu': '성우', 'Band': '밴드', 'Idol': '아이돌', 'Comedian': '코미디언',

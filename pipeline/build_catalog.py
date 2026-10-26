@@ -35,6 +35,19 @@ for f in json.load(open('fribb.json')):
     if f.get('mal_id'): fr.setdefault(('mal',f['mal_id']),f)
     if f.get('anilist_id'): fr.setdefault(('al',f['anilist_id']),f)
 kana=re.compile('[\u3040-\u30ff]'); hangul=re.compile('[\uac00-\ud7a3]'); cjk=re.compile('[\u4e00-\u9fff]')
+_kk=[None]
+def ja_like(y, title):
+    """일본어 이름 y를 읽은 로마자가 제목과 얼마나 닮았는지 (0~1). 중국어 간체·번체로 보이는 이름은 깎음."""
+    import difflib
+    if _kk[0] is None:
+        try: import pykakasi; _kk[0]=pykakasi.kakasi()
+        except Exception: _kk[0]=False
+    rd=''.join(p['hepburn'] for p in _kk[0].convert(y)) if _kk[0] else y
+    a=re.sub(r'[^a-z0-9]','',rd.lower()); b=re.sub(r'[^a-z0-9]','',(title or '').lower())
+    sc=difflib.SequenceMatcher(None,a,b).ratio()
+    if not re.search(r'[\u3040-\u30ff]', y): sc-=0.3        # 가나가 없으면(중국어 제목일 가능성) 덜 믿음
+    return sc
+
 def pick(t,lang,types=('official','main','syn')):
     for ty in types:
         if t.get((lang,ty)): return t[(lang,ty)][0]
@@ -88,7 +101,11 @@ for x in a:
     PH=re.compile(r'[\(（]\s*(続編|新作|新シリーズ|仮|仮題|仮称|タイトル未定|新アニメ化プロジェクト|新アニメ|新作アニメ|アニメ化決定|アニメ化プロジェクト)\s*[\)）]|\(仮\)')     # 발표 전 자리표시 제목
     ja=pick(t,'ja')
     if ja and PH.search(ja): ja=next((y for y in x['synonyms'] if kana.search(y) and not PH.search(y) and y.replace(' ','').startswith(PH.sub('',ja).replace(' ','').strip())),None) or ja
-    ja=ja or next((y for y in x['synonyms'] if kana.search(y)),None) or next((y for y in x['synonyms'] if cjk.search(y) and not hangul.search(y)),None)
+    if not ja:
+        # AniDB에 일본어 제목이 아직 없는 새 작품: 다른 이름 중 첫 번째가 아니라, 읽었을 때 대표 로마자 제목과 가장 닮은 일본어 이름을 고름
+        # (「Fujimoto Tatsuki 17-26」에 회차 제목 「シカク」, 「Golden Kamuy: Inazuma Goutou…」에 「…シマエナガ」가 뽑히던 문제)
+        cands=[y for y in x['synonyms'] if not hangul.search(y) and (kana.search(y) or cjk.search(y))]
+        ja=max(cands, key=lambda y: ja_like(y, x['title']), default=None) if cands else None
     if ja and len(ja) <= 4:                               # 「幼ラブ」처럼 짧은 줄임말이 뽑혔으면, 같은 글자로 시작하는 긴 정식 제목으로
         ja=next((y for y in x['synonyms'] if y[:1]==ja[:1] and len(y) >= len(ja)+4 and kana.search(y) and not hangul.search(y)), None) or ja
     if ja and re.fullmatch(r'[ぁ-ん]{2,6}', ja):          # 「るるりり」 같은 히라가나 줄임말이 뽑히면 정식 제목으로
@@ -125,9 +142,11 @@ import unicodedata
 def nja(t):
     t = unicodedata.normalize('NFKC', t or '')
     t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
+    t = re.sub(r'^\s*(OVA|OAD|ONA|劇場版OVA)\s+', '', t)               # 「OVA ケガレボシ」 = 「ケガレボシ」
     return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
 def nro(t):
     t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
+    t = re.sub(r'^\s*(ova|oad|ona)\s+', '', t)
     t = re.sub(r'\b(part|cour|season)\s*(iv|iii|ii)\b', lambda m: m.group(1) + {'ii': '2', 'iii': '3', 'iv': '4'}[m.group(2)], t)   # 「Part II」 = 「Part 2」 (겹글자 줄이기 전에)
     t = re.sub(r'[^a-z0-9]', '', t)
     t = t.replace('wo', 'o').replace('ou', 'o').replace('uu', 'u').replace('oo', 'o')
@@ -167,14 +186,18 @@ def keys(r):
     def add(k, prim): ks[k] = ks.get(k, False) or prim
     # 부제 앞부분(「世界最強の後衛 ~迷宮国の新人探索者~」의 「世界最強の後衛」)도 다른 이름처럼 비교 (부제를 뺀 이름만 적은 보조 출처 항목과 맞추려고)
     def mains(x):
-        m = re.split(r'\s*[~～〜:：]\s*', x or '', maxsplit=1)[0].strip()
-        return [m] if m and m != (x or '').strip() else []
+        out = []
+        # 부제 앞부분, 두 편을 「/」로 묶은 제목의 첫 편 (「…お銀/シマエナガ」). 「Ranma 1/2」 같은 숫자 사이 「/」와 「Fate/Zero」처럼 짧은 뒷부분은 나누지 않음
+        for sep in (r'\s*[~～〜:：]\s*', r'(?<=[^\d\s])\s*/\s*(?=[^\d\s/]{6})'):
+            m = re.split(sep, x or '', maxsplit=1)[0].strip()
+            if m and m != (x or '').strip(): out.append(m)
+        return out
     for jt, prim in [(r['ja'], True)] + [(y, False) for y in r.get('_syn', []) if CJK.search(y)] + [(y, False) for y in mains(r['ja'])]:
         j = nja(jt)
         if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: add(('ja', j), prim)       # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
     for t, prim in [(r['r'], True), (r.get('en'), True)] + [(y, False) for y in r.get('_syn', []) if not CJK.search(y)] + [(y, False) for y in mains(r['r'])]:
         n = nro(t)
-        if len(n) >= 6: add(('ro', n), prim)
+        if len(n) >= 6 or (prim and len(n) >= 4): add(('ro', n), prim)      # 대표 제목끼리는 「SANDA」처럼 짧아도 비교
     return ks
 for i, r in enumerate(out):
     if r['adb']: buckets[('adb', r['adb'])].append((i, True))
@@ -187,7 +210,10 @@ for i, r in enumerate(out):
         elif not (r['al'] or r['mal']) and t and len(nf(t)) >= 2: buckets[('tbase', nf(t), r['y'])].append((i, 'plain'))
     kb = nbare(r['ja'])
     if len(kb) >= 4 and (kb != nja(r['ja']) or not (r['al'] or r['mal'])): buckets[('tb', kb, r['y'])].append((i, True))
-def digits(r): return set(re.findall(r'\d+', unicodedata.normalize('NFKC', (r['ja'] or '') + ' ' + (r['r'] or ''))))
+def digits(r):
+    t = unicodedata.normalize('NFKC', (r['ja'] or '') + ' ' + (r['r'] or ''))
+    t = re.sub(r'[\(（]\s*(19|20)\d\d\s*[\)）]', '', t)          # 「かくりよの宿飯 (2025)」의 연도 꼬리는 번호로 안 봄
+    return set(re.findall(r'\d+', t))
 def prefix_ok(x, y, n=4):
     return any(len(p) >= n and len(q) >= n and p[:n] == q[:n] for p, q in ((nja(x['ja']), nja(y['ja'])), (nro(x['r']), nro(y['r']))))
 def syn_ok(a, b):
