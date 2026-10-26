@@ -117,10 +117,14 @@ def keys(r):
     (예: 「Hungry Days」라는 다른 이름을 함께 가진 서로 다른 광고 영상)."""
     ks = {}
     def add(k, prim): ks[k] = ks.get(k, False) or prim
-    for jt, prim in [(r['ja'], True)] + [(y, False) for y in r.get('_syn', []) if CJK.search(y)]:
+    # 부제 앞부분(「世界最強の後衛 ~迷宮国の新人探索者~」의 「世界最強の後衛」)도 다른 이름처럼 비교 (부제를 뺀 이름만 적은 보조 출처 항목과 맞추려고)
+    def mains(x):
+        m = re.split(r'\s*[~～〜:：]\s*', x or '', maxsplit=1)[0].strip()
+        return [m] if m and m != (x or '').strip() else []
+    for jt, prim in [(r['ja'], True)] + [(y, False) for y in r.get('_syn', []) if CJK.search(y)] + [(y, False) for y in mains(r['ja'])]:
         j = nja(jt)
         if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: add(('ja', j), prim)       # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
-    for t, prim in [(r['r'], True), (r.get('en'), True)] + [(y, False) for y in r.get('_syn', []) if not CJK.search(y)]:
+    for t, prim in [(r['r'], True), (r.get('en'), True)] + [(y, False) for y in r.get('_syn', []) if not CJK.search(y)] + [(y, False) for y in mains(r['r'])]:
         n = nro(t)
         if len(n) >= 6: add(('ro', n), prim)
     return ks
@@ -135,9 +139,8 @@ def prefix_ok(x, y, n=4):
 def syn_ok(a, b):
     """한쪽의 「다른 이름」과만 같을 때는 더 엄격하게: 같은 해, 제목 속 숫자(시즌·편 번호)가 서로 맞고, 대표 제목 앞부분이 같을 것
     (「오시리 탐정 9기 2쿨」과 「10기」, 「사이보그 009 콜 오브 저스티스」 1·2편, 「원피스」·「드래곤볼」 같은 방송 특집이 섞이지 않게)"""
-    if a['y'] and b['y'] and a['y'] != b['y']: return False
-    da, db = digits(a), digits(b)
-    if da and db and da != db: return False
+    if not (a['y'] and b['y']) or a['y'] != b['y']: return False          # 연도를 모르면 합치지 않음 (예: 「Blue Lock: Neo Egoist League」 연도 없음 → 1기와 섞임)
+    if digits(a) != digits(b): return False                             # 한쪽에만 번호가 있어도 다른 편 (예: 「Baki-dou: Dai 2 Cour」와 「Baki-dou」)
     return prefix_ok(a, b)
 def compatible(a, b):
     """같은 제목일 때 같은 작품으로 볼지: 형식이 같고(미분류는 예외), 연도 차이 1년 이내(한쪽이 미상이면 허용).

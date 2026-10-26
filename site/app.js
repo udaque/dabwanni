@@ -45,6 +45,7 @@ function title(w, lang = S.lang){ const o = {ko:w.ko, ja:w.ja, en:w.en || w.r}; 
 const SEASON_RE = [
   /\s*第\s*\d+\s*期/g, /\s*\d+\s*期(?=\s|$)/g, /\s*[第割]\s*\d+\s*クール/g, /\s*\d+\s*クール目/g, /\s*第\s*\d+\s*シーズン/g, /\s*第\s*\d+\s*部/g,
   /\s*\d+(?:st|nd|rd|th)\s*Season/gi, /\s*Season\s*\d+/gi, /\s*Part\s*\d+/gi, /\s*Cour\s*\d+/gi,
+  /(?<=[\s\u3040-\u30ff\u4e00-\u9fff、・:])\s*(?:II|III|IV|V|VI|Ⅱ|Ⅲ|Ⅳ|Ⅴ|Ⅵ)$/g, /\s+(?:II|III|IV|V|VI)$/g,
   /\s*\d+\s*기(?=\s|$)/g, /\s*시즌\s*\d+/g, /\s*\d+\s*쿨(?=\s|$)/g, /\s*파트\s*\d+/g, /\s*\d+\s*부(?=\s|$)/g, /\s*파이널(?=\s|$)/g];
 // 발표 전 임시 표기((Sequel)·(続編)·(新アニメ化プロジェクト) 등)는 늘 빼고, 시즌 표시는 꼬리표가 있을 때만 뺌
 const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-ka Project|TBA|Working Title|続編|新作|新シリーズ|仮|仮題|仮称|新アニメ化プロジェクト|新アニメ|アニメ化決定)\s*[\)）]/gi;
@@ -212,6 +213,7 @@ function onClick(e){
     if (act === 'open') { location.hash = '#/w/' + encodeURIComponent(k); return; }
     if (act === 'person') { location.hash = '#/p/' + encodeURIComponent(el.dataset.p); return; }
     if (act === 'studio') { location.hash = '#/s/' + encodeURIComponent(el.dataset.s); return; }
+    if (act === 'wscope') { WSCOPE[el.dataset.v] = !WSCOPE[el.dataset.v]; store.set('wantScope', WSCOPE); S.shown = PAGE; render(); return; }
     if (act === 'type' || act === 'len') { const set = act === 'type' ? S.types : S.lens, v = el.dataset.v; set.has(v) ? set.delete(v) : set.add(v); S.shown = PAGE; render(); return; }
     if (act === 'more') { S.shown += PAGE * 2; render(); return; }
   }
@@ -248,6 +250,7 @@ function drill(row, items, extra){
   const list = items.map(it => `<div class="varow"><i class="dot ${stDot(it.m)}"></i>${extra ? extra(it) : ''}<button class="link" data-act="open" data-k="${esc(it.w.k)}">${titleHTML(it.w)}</button></div>`).join('');
   return row.replace('<span class="bar">', `<span class="bar" data-tog="${id}" role="button" tabindex="0">`) + `<div class="valist" data-list="${id}" hidden>${list}</div>`;
 }
+const WSCOPE = Object.assign({g: true, w: true}, store.get('wantScope', {}));   // 관심 탭에 보는 중·봤음도 보일지
 const SCOPE = Object.assign({g: false, i: false}, store.get('statsScope', {}));   // 봤음 기준 통계에 보는 중·관심만도 넣을지
 function renderStats(){
   const L = [];
@@ -448,7 +451,8 @@ function baseList(){
   else L = W;
   if (S.tab === 'watching') L = L.filter(w => marks[w.k]?.ep && !marks[w.k]?.w);
   if (S.tab === 'watched') L = L.filter(w => marks[w.k]?.w);
-  if (S.tab === 'want') L = L.filter(w => marks[w.k]?.i);
+  if (S.tab === 'want') L = L.filter(w => { const m = marks[w.k]; if (!m?.i) return false;
+    return m.w ? WSCOPE.w : m.ep ? WSCOPE.g : true; });       // 관심 탭: 봤음·보는 중은 넣었다 뺄 수 있음
   return L;
 }
 const EMPTY = {
@@ -475,7 +479,9 @@ function render(){
   $('#qLabel').textContent = `${F('quarter', S.qq)} (${F('quarterMonths', S.qq)})`;
   const base = baseList(), tc = {}, lc = {};
   base.forEach(w => { tc[w.ty] = (tc[w.ty] || 0) + 1; if (w.lk) lc[w.lk] = (lc[w.lk] || 0) + 1; });
-  $('#filters').innerHTML =
+  $('#filters').innerHTML = (S.tab === 'want' && !S.q ? `<div class="stscope wscope"><span class="stbase"><i class="dot i"></i>${t('관심만')}</span>
+      <button data-act="wscope" data-v="g" class="${WSCOPE.g ? 'on' : ''}"><i class="dot g"></i>${t('보는 중')}</button>
+      <button data-act="wscope" data-v="w" class="${WSCOPE.w ? 'on' : ''}"><i class="dot w"></i>${t('봤음')}</button></div>` : '') +
     TYPE_ORDER.filter(ty => tc[ty]).map(ty => `<button class="chip ${S.types.has(ty) ? 'on' : ''}" data-act="type" data-v="${ty}">${t(TYPE[ty])}<span class="pill">${fmtN(tc[ty])}</span></button>`).join('') +
     Object.keys(LEN).filter(l => lc[l]).map(l => `<button class="chip ${S.lens.has(l) ? 'on' : ''}" data-act="len" data-v="${l}">${t(LEN[l])}<span class="pill">${fmtN(lc[l])}</span></button>`).join('');
   let L = base.filter(w => (!S.types.size || S.types.has(w.ty)) && (!S.lens.size || S.lens.has(w.lk)));
@@ -591,7 +597,7 @@ function workHTML(w, d){
   h += sec('기본 정보', dl([
     ['방영 시기', w.y ? `${F('year', w.y)}${w.q ? ` ${F('quarter', w.q)} (${F('quarterMonths', w.q)})` : ''}` : t('미상')],
     ['형식', t(TYPE[w.ty]) + (w.net ? ` (${t('넷플릭스 독점')})` : '')],
-    ['화수', w.e ? F('epCount', w.e) : t('미상')],
+    ['화수', w.e ? F('epCount', w.e) : t(['U', 'O', 'H'].includes(w.st) ? '미정' : '미상')],
     ['1화 길이', w.d ? fmtDur(w.d) + (w.lk ? ` (${t(LEN[w.lk].split(' ')[0])})` : '') : t('미상')],
     ['원작', d?.source ? esc(t(d.source)) + (author ? ' · ' + author.people.map(pLink).join(', ') : '') : ''],
     ['제작', stuMain || t('미상')],

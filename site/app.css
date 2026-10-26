@@ -248,3 +248,4 @@ html{touch-action:manipulation}
 .valist[hidden]{display:none}
 .varow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
 .varow .link{font-size:13px;text-align:left}
+.wscope{width:100%;margin:0 0 4px}

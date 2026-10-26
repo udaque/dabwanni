@@ -23,6 +23,7 @@ def strip_disambig(t): return re.sub(r'\s*\([^)]*\)\s*$', '', t or '').strip()
 class Names:
     def __init__(self):
         self.namu = load('namu', 'index') or {}
+        self.work_titles = set()      # 작품 한국어 제목 (main에서 채움)
         self.korea = load('namu', 'korea') or {}
         wp = load('wikidata', 'people') or []
         self.wd_people = {pname(r['ja']): r for r in wp if r.get('ja') and r.get('ko')}
@@ -32,9 +33,11 @@ class Names:
             for k in (r.get('ja'), r.get('en')):
                 if k: self.wd_studio.setdefault(pname(k).lower(), r)
         self.wd_works = {r['mal']: r for r in load('wikidata', 'works') or []}
-    def namu_one(self, ja, prefer=None):
+    def namu_one(self, ja, prefer=None, not_work=False):
         c = [t for t in (self.namu.get(pname(ja or '')) or []) if '/' not in t
              and not re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', t)]   # 예전 색인에 든 하위·목록 문서 제목은 버림
+        if not_work:      # 인물·회사 이름을 찾을 때는 작품 문서 제목(예: 「5등분의 신부」)을 버림
+            c = [t for t in c if nko(strip_disambig(t)) not in self.work_titles and not re.search(r'\d', t)]
         if prefer:
             for t in c:
                 if any(p and p in t for p in prefer): return strip_disambig(t)
@@ -44,7 +47,7 @@ class Names:
         return None
     def person(self, native, first=None, last=None):
         if native and re.search(r'[\uac00-\ud7a3]', native): return {'ko': native, 'ja': native}
-        ko = self.namu_one(native, ['성우', '작곡', '작사', '가수', '애니메이터', '감독', '각본', '일러스트']) if native else None
+        ko = self.namu_one(native, ['성우', '작곡', '작사', '가수', '애니메이터', '감독', '각본', '일러스트'], not_work=True) if native else None
         if not ko and native and pname(native) in self.wd_people: ko = self.wd_people[pname(native)]['ko']
         auto = not ko
         if not ko: ko, _ = person_ko(native, first, last)
@@ -61,7 +64,7 @@ class Names:
         return {k2: v for k2, v in {'ko': k, 'ja': native, 'en': full, 'auto': 1}.items() if v}
     def studio(self, name, work=None):
         isja = bool(JA.search(name))
-        ko = self.namu_one(name, ['기업', '회사', '스튜디오']) if isja else None
+        ko = self.namu_one(name, ['기업', '회사', '스튜디오'], not_work=True) if isja else None
         wd = self.wd_studio.get(pname(name).lower()) or {}
         if not ko and wd.get('ko'): ko = wd['ko']
         auto = False
@@ -90,11 +93,27 @@ def parse_air(seq):
         out.append((yr, int(m.group(2))) if yr else None)
     return out
 
+def prequel_total(rels, BY):
+    """AniList 「이전 시즌」을 따라가며 TV·웹 시즌들의 화수를 더함 (얼음 성벽 2기 → 1기 14화)"""
+    total, seen, cur = 0, set(), rels or []
+    while True:
+        pre = [r['k'] for r in cur if r.get('type') == 'PREQUEL' and r['k'] in BY and r['k'] not in seen]
+        if not pre: break
+        p = pre[0]; seen.add(p); pw = BY[p]
+        if pw.get('ty') in ('T', 'O') and pw.get('e'): total += pw['e']
+        cur = (load('anilist', p) or {}).get('relations', {}).get('edges', [])
+        cur = [{'k': 'a' + str(x['node']['id']), 'type': x['relationType']} for x in cur]
+    return total
+
 def episode_offset(w, E, sy_eps, jw_eps, rels, BY):
     """이어서 세는 시즌의 앞쪽 회차 수(오프셋). 0이면 1화부터, None이면 알 수 없음(위키 회차는 쓰지 않음)."""
     nums = lambda L: sorted(int(e['no']) for e in L if str(e.get('no', '')).isdigit())
     sn, jn = nums(sy_eps), nums(jw_eps)
-    if not E: return 0
+    if not E:
+        # 화수를 모르는 방영 중 작품: 쇼보이 번호가 1보다 크면 거기서, 위키 번호가 이전 시즌 합보다 크면 그 합에서 시작
+        if sn and sn[0] > 1: return sn[0] - 1
+        pt = prequel_total(rels, BY) if jn else 0
+        return pt if pt and jn[-1] > pt else 0
     # 1) 쇼보이 캘린더는 시즌마다 따로라, 번호가 화수보다 크면 그 첫 번호가 곧 시작점
     if sn and sn[-1] > E: return sn[0] - 1
     if not jn or jn[-1] <= E: return 0
@@ -105,14 +124,7 @@ def episode_offset(w, E, sy_eps, jw_eps, rels, BY):
         cand = [n for n, d in dated if start <= d < (start[0] + (start[1] + 5) // 12, (start[1] + 5) % 12 + 1)]
         if cand: return min(cand) - 1
     # 3) AniList의 이전 시즌들 화수를 더함
-    total, seen, cur = 0, set(), rels or []
-    while True:
-        pre = [r['k'] for r in cur if r.get('type') == 'PREQUEL' and r['k'] in BY and r['k'] not in seen]
-        if not pre: break
-        p = pre[0]; seen.add(p); pw = BY[p]
-        if pw.get('ty') in ('T', 'O') and pw.get('e'): total += pw['e']
-        cur = (load('anilist', p) or {}).get('relations', {}).get('edges', [])
-        cur = [{'k': 'a' + str(x['node']['id']), 'type': x['relationType']} for x in cur]
+    total = prequel_total(rels, BY)
     if total and jn[-1] >= total + 1 and any(total < n <= total + E for n in jn): return total
     return None
 
@@ -169,6 +181,7 @@ JWROLE = {'script': '각본', 'storyboard': '콘티', 'director': '연출', 'ani
 def main():
     W = load_catalog(); BY = {w['k']: w for w in W}
     NM = Names()
+    NM.work_titles = {nko(w['ko']) for w in W if w.get('ko')} | {nko(t) for v in NM.namu.values() for t in v if '(애니메이션)' in t}
     out = {x: os.path.join(SITE, 'data', x) for x in ('detail', 'people', 'studios')}
     for p in out.values(): shutil.rmtree(p, ignore_errors=True); os.makedirs(p)
     people, studios, prof = {}, {}, {}
@@ -230,6 +243,12 @@ def main():
         al, sy, at, tm, jw, mu, ab = (load(s, k) for s in ('anilist', 'syoboi', 'animethemes', 'tmdb', 'jawiki', 'music', 'anitabi'))
         _t = (al or {}).get('title') or {}
         w['_alt'] = ' '.join(x for x in (_t.get('romaji'), _t.get('english')) if x)      # 시즌 꼬리표 판별용 (예: Kusuriya no Hitorigoto 2nd Season)
+        w['_pre'] = any(e.get('relationType') == 'PREQUEL' for e in ((al or {}).get('relations') or {}).get('edges', []))   # 이전 시즌이 있는지 (로마 숫자 시즌 판별용)
+        # 방영 시기: 작품 목록 원천(manami)은 발표 때 넣은 임시 시기가 늦게 고쳐지는 경우가 있어(예: FX전사 쿠루미 2026년 겨울 → 실제 10월),
+        # AniList 방영 시작일에 월까지 있으면 그걸로 분기를 맞춤 (아래 TMDB 회차 거르기도 이 분기를 씀)
+        _sd = (al or {}).get('startDate') or {}
+        if _sd.get('year') and _sd.get('month') and w.get('ty') != 'X':
+            w['y'], w['q'] = _sd['year'], (_sd['month'] - 1) // 3 + 1
         # TMDB 회차가 다른 시즌 것이면(예: 3기 작품에 1기 회차가 붙음) 이 작품 방영 시작보다 한참 앞선 회차는 버림
         tm_eps = (tm or {}).get('episodes', [])
         if tm_eps and w.get('y') and w.get('q') and any(e.get('air') for e in tm_eps):
@@ -239,7 +258,7 @@ def main():
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
         ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'))
-        if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'))
+        if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):
@@ -330,7 +349,9 @@ def main():
         tm_n = sorted(int(e['no']) for e in tm_eps if str(e.get('no', '')).isdigit())
         tm_abs = bool(tm_n) and tm_n[0] > 1          # TMDB가 시즌 회차를 시리즈 전체 번호(49~60화)로 매긴 경우
         E = w.get('e') or 0
-        if w.get('st') in ('U', 'O', 'H') and len(tm_n) > E: E = len(tm_n)     # 방영 전 자리표시 화수(1화)보다 TMDB 회차 목록이 실제에 가까움
+        live = w.get('st') in ('U', 'O', 'H') and w.get('ty') in ('T', 'O')
+        if live and E <= 1 and len(tm_n) <= 1: E = 0                   # 아직 안 끝난 작품의 「1화」는 대개 자리표시라 모르는 것으로 봄
+        if w.get('st') in ('U', 'O', 'H') and len(tm_n) > E: E = len(tm_n); w['e'] = E   # TMDB 회차 목록(앞으로 나올 회차 포함)이 더 실제에 가까움
         O = episode_offset(w, E, (sy or {}).get('episodes', []), (jw or {}).get('episodes', []), d.get('relations'), BY)      # d['relations']: [{'k','type'}] 꼴
         if tm_abs and not ((sy or {}).get('episodes')): O = tm_n[0] - 1
         if O: d['ep_offset'] = O
@@ -341,7 +362,8 @@ def main():
             n = int(no)
             return disp(n) if (local and O) else str(n)
         def in_range(no):
-            return not (E and O is not None and str(no).isdigit() and not (O < int(no) <= O + E))
+            if not str(no).isdigit() or O is None: return True
+            return O < int(no) <= O + E if E else int(no) > O
         # 여기까지 ep_staff에는 AniList 스태프의 「(eps 1-3)」 표기만 들어 있음: 시즌 안 번호로 보고 화면 번호로 옮김
         if O: ep_staff = {(disp(int(no)) if no.isdigit() else no): v for no, v in ep_staff.items()}
         if O:
@@ -395,9 +417,6 @@ def main():
             L = sorted(eps.values(), key=lambda e: (0, int(e['no'])) if e['no'].isdigit() else (1, e['no']))
             for e in L:
                 if e['no'].isdigit(): e['i'] = int(e['no']) - (O or 0)
-            # 회차 목록(TMDB·쇼보이 등)이 화수보다 길면, 아직 안 끝난 작품은 목록 쪽이 실제에 가까움
-            mx = max((e['i'] for e in L if isinstance(e.get('i'), int)), default=0)
-            if w.get('st') in ('U', 'O', 'H') and mx > (w.get('e') or 0): w['e'] = mx
             use = {}
             for e in L:
                 for s in e.get('songs', []): use[(s['kind'], s['title'])] = use.get((s['kind'], s['title']), 0) + 1
@@ -405,6 +424,9 @@ def main():
                 for s in e.get('songs', []):
                     if use[(s['kind'], s['title'])] <= 2 and len(L) > 4: s['special'] = True   # 특수 엔딩 등
             d['episodes'] = L
+        # 방영 전 TV·웹 작품의 「1화」는 화수가 아직 발표되지 않아 출처들이 넣어 둔 자리표시인 경우가 대부분이라, 회차 목록으로도
+        # 확인되지 않으면 「미정」으로 둠 (예: 얼음 성벽 2기: AniList·MAL·AniDB 모두 1화, TMDB 회차 없음)
+        if w.get('st') in ('U', 'O', 'H') and w.get('ty') in ('T', 'O') and (w.get('e') or 0) <= 1 and len(tm_n) <= 1: w['e'] = None
 
         main, committee = list(dict.fromkeys(main)), [s for s in dict.fromkeys(committee) if s not in main]
         d['studios'] = {'main': [sref(s) for s in main], 'committee': [sref(s) for s in committee],
@@ -479,11 +501,13 @@ def main():
     if 'sm' not in c['fields']:
         c['fields'].append('sm'); [r.append(None) for r in c['rows']]
     ki, si, ei, smi = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'), c['fields'].index('sm'); n_ko = 0
+    yi, qi = c['fields'].index('y'), c['fields'].index('q')
     for r in c['rows']:
         w = BY[r[0]]
-        r[smi] = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x))      # 제목 뒤 시즌·쿨 꼬리표용
+        r[smi] = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))      # 제목 뒤 시즌·쿨 꼬리표용
         if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
+        r[yi], r[qi] = w.get('y'), w.get('q')
     for s in c['studios']:
         if s[3] in studios and not studios[s[3]]['name'].get('auto'): s[1], s[2] = studios[s[3]]['name']['ko'], False
     json.dump(c, open(cp, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))

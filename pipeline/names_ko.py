@@ -208,7 +208,14 @@ def date_ko(s):
     return ''.join(f'{int(v)}{u} ' for v, u in zip(p, ('년', '월', '일'))).strip() if p else None
 
 
-def season_mark(ja, romaji=None):
+ROMAN = {'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6}
+def roman_season(*titles):
+    """제목 끝의 로마 숫자 시즌 (「…剣聖になるII」, 「… Kensei ni Naru II」) → 2. 없으면 None."""
+    for x in titles:
+        m = re.search(r'(?:^|[\s\u3040-\u30ff\u4e00-\u9fff、・:])(II|III|IV|V|VI)$', unicodedata.normalize('NFKC', x or '').strip())
+        if m: return ROMAN[m.group(1)]
+
+def season_mark(ja, romaji=None, roman=False):
     """일본어·로마자 제목에서 시즌 표시를 찾아 한국어로 (예: 第2期 第2クール → 2기 2쿨). 없으면 None."""
     t = unicodedata.normalize('NFKC', ja or ''); r = romaji or ''
     def first(pats):
@@ -221,11 +228,12 @@ def season_mark(ja, romaji=None):
     cour = first([(r'第\s*(\d+)\s*クール', '{}쿨'), (r'(\d+)\s*クール目', '{}쿨'), (r'[Pp]art\s*(\d+)', '파트 {}'), (r'[Cc]our\s*(\d+)', '{}쿨')])
     bu = first([(r'第\s*(\d+)\s*部', '{}부')])
     if not cour and re.search(r'(後編|後半)', t): cour = '2쿨'
+    if not ki and roman and roman_season(ja, romaji): ki = f'{roman_season(ja, romaji)}기'      # 로마 숫자는 이전 시즌이 있을 때만 (「ストリートファイターII」 같은 원작 제목과 구분)
     marks = [x for x in (ki, bu, cour) if x]
     if not marks and re.search(r'(完結編|最終章|ファイナルシーズン|[Ff]inal [Ss]eason)', t + ' ' + r): marks = ['파이널']
     return ' '.join(marks) or None
 
-def season_code(ja, romaji=None, en=None):
+def season_code(ja, romaji=None, en=None, roman=False):
     """제목 속 시즌·쿨 표시를 짧은 부호로 (예: 第3期 → s3, 3rd Season Part 2 → s3c2, 第2クール → c2, 完結編 → f). 없으면 None.
     사이트는 이 부호로 제목 뒤에 「3기」 「2쿨」 같은 꼬리표를 붙이고, 제목에서는 그 표시를 뺍니다."""
     t = unicodedata.normalize('NFKC', ja or ''); r = ' '.join(x for x in (romaji, en) if x)
@@ -235,6 +243,7 @@ def season_code(ja, romaji=None, en=None):
                 m = re.search(p, src)
                 if m and int(m.group(1)) >= 2: return int(m.group(1))
     s = first([r'第\s*(\d+)\s*期', r'(\d+)\s*期', r'(\d+)(?:st|nd|rd|th)\s*[Ss]eason', r'[Ss]eason\s*(\d+)', r'第\s*(\d+)\s*シーズン'])
+    s = s or (roman_season(ja, romaji, en) if roman else None)
     c = first([r'[第割]\s*(\d+)\s*クール', r'(\d+)\s*クール目', r'[Pp]art\s*(\d+)', r'[Cc]our\s*(\d+)'])
     b = first([r'第\s*(\d+)\s*部'])
     out = (f's{s}' if s else '') + (f'b{b}' if b else '') + (f'c{c}' if c else '')
@@ -260,9 +269,9 @@ def add_arc(ko, ja):
     if out in ko.replace(' ', ''): return ko
     return f'{ko} {out}'
 
-def add_season(ko, ja, romaji=None):
+def add_season(ko, ja, romaji=None, roman=False):
     """한국어 제목에 시즌 표시가 없고 원제에는 있으면 덧붙임 (예: 정반대의 너와 나 + 2기)."""
     if not ko: return ko
     if re.search(r'(\d|기|시즌|쿨|부\b|파트|[Ss]eason|[Pp]art|파이널|완결)', ko): return ko
-    m = season_mark(ja, romaji)
+    m = season_mark(ja, romaji, roman)
     return f'{ko} {m}' if m else ko
