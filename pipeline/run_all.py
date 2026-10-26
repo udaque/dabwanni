@@ -29,10 +29,25 @@ def last_ok(name):
     p = os.path.join(ROOT, 'raw', '_runs.json')
     d = json.load(open(p)) if os.path.exists(p) else {}
     return d.get(name)
-def mark_ok(name):
+# 단계의 코드가 바뀌면 실행 주기와 상관없이 다시 돌림 (예: 중복 합치기를 고친 날 작품 목록을 바로 다시 만들게)
+CODE = {'catalog': ['fetch_sources.sh', 'build_catalog.py', 'pack_catalog.py', 'names_ko.py', 'translit.py']}
+def code_hash(name, cmd):
+    import hashlib
+    files = CODE.get(name) or [x for x in cmd if x.endswith(('.py', '.sh'))]
+    h = hashlib.sha1()
+    for f in files:
+        p = os.path.join(ROOT, f)
+        if os.path.exists(p): h.update(open(p, 'rb').read())
+    return h.hexdigest()[:12]
+def last_code(name):
+    p = os.path.join(ROOT, 'raw', '_runs.json')
+    return (json.load(open(p)) if os.path.exists(p) else {}).get(name + '#code')
+def mark_ok(name, code=None):
     p = os.path.join(ROOT, 'raw', '_runs.json'); os.makedirs(os.path.dirname(p), exist_ok=True)
     d = json.load(open(p)) if os.path.exists(p) else {}
-    d[name] = datetime.datetime.now(datetime.timezone.utc).isoformat(); json.dump(d, open(p, 'w'), indent=1)
+    d[name] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    if code: d[name + '#code'] = code
+    json.dump(d, open(p, 'w'), indent=1)
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--budget-min', type=float, default=320); ap.add_argument('--only', default='')
@@ -50,8 +65,8 @@ def main():
         if only and name not in only: continue
         if name in HOME_ONLY and not only:
             results.append((name, 'skipped', '집 PC에서 따로 실행 (home_syoboi.sh)')); continue
-        lo = last_ok(name)
-        if every and lo and not a.force and (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(lo)).days < every:
+        lo = last_ok(name); code = code_hash(name, cmd)
+        if every and lo and not a.force and last_code(name) == code and (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(lo)).days < every:
             results.append((name, 'skipped', f'{every}일 주기, 최근 성공 {lo[:10]}')); continue
         left = (deadline - time.time()) / 60 - 15          # 마지막 병합·배포 몫 15분
         if left < 3: results.append((name, 'skipped', '시간 예산 없음')); continue
@@ -64,7 +79,7 @@ def main():
         if p.returncode == 0:
             sm = os.path.join(LOGS, 'summary', f'{name}.json')
             st = json.load(open(sm))['status'] if os.path.exists(sm) else 'ok'
-            if st == 'ok': mark_ok(name)
+            if st == 'ok': mark_ok(name, code)
             if name == 'catalog': os.makedirs(os.path.dirname(cat_bak), exist_ok=True); shutil.copy(cat, cat_bak)
             results.append((name, st, ''))
         else:

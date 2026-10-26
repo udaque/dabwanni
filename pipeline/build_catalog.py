@@ -47,7 +47,7 @@ for x in a:
     if not f and mal: f=fr.get(('mal',int(mal)))
     if f and not adb and f.get('anidb_id'): adb=str(f['anidb_id'])
     t=titles.get(int(adb),{}) if adb else {}
-    PH=re.compile(r'[\(（]\s*(続編|新作|新シリーズ|仮|仮題|仮称|タイトル未定)\s*[\)）]|\(仮\)')     # 발표 전 자리표시 제목
+    PH=re.compile(r'[\(（]\s*(続編|新作|新シリーズ|仮|仮題|仮称|タイトル未定|新アニメ化プロジェクト|新アニメ|新作アニメ|アニメ化決定|アニメ化プロジェクト)\s*[\)）]|\(仮\)')     # 발표 전 자리표시 제목
     ja=pick(t,'ja')
     if ja and PH.search(ja): ja=next((y for y in x['synonyms'] if kana.search(y) and not PH.search(y) and y.replace(' ','').startswith(PH.sub('',ja).replace(' ','').strip())),None) or ja
     ja=ja or next((y for y in x['synonyms'] if kana.search(y)),None) or next((y for y in x['synonyms'] if cjk.search(y) and not hangul.search(y)),None)

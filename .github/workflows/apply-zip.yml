@@ -11,6 +11,7 @@ jobs:
         with:
           token: ${{ secrets.BOOT_TOKEN }}
       - name: 압축 풀고 커밋
+        id: apply
         run: |
           # 적용 커밋이 update.zip을 지우는 것도 이 작업을 다시 깨우므로, 파일이 없으면 조용히 끝냄
           [ -f update.zip ] || { echo "적용할 update.zip이 없습니다 (방금 적용을 마친 커밋)"; exit 0; }
@@ -21,3 +22,12 @@ jobs:
           git add -A
           git commit -m "수정본 적용"
           git push
+          echo "applied=1" >> "$GITHUB_OUTPUT"
+
+      # 수정본을 올리면 기다리지 않고 바로 사이트에 반영: 수집은 건너뛰고 작품 목록(코드가 바뀐 경우)·병합·배포만 돌림 (10분 안팎)
+      # 매일 돌던 갱신이 진행 중이면 그게 끝난 뒤 이어서 돎
+      - name: 바로 반영 시작
+        if: steps.apply.outputs.applied == '1'
+        env:
+          GH_TOKEN: ${{ secrets.BOOT_TOKEN }}
+        run: gh workflow run update.yml --ref "${GITHUB_REF_NAME}" -f only=catalog -f budget=30
