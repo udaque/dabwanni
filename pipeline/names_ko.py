@@ -177,7 +177,7 @@ STATION_KO = {'NHK総合': 'NHK 종합', 'NHK Eテレ': 'NHK E테레', 'NHK教�
  'Apple TV Plus': '애플 TV+', 'Apple TV+': '애플 TV+', 'Laftel': '라프텔', 'Crunchyroll Amazon Channel': '크런치롤', 'Netflix basic with Ads': '넷플릭스(광고형)'}
 def station_ko(n): return {'ko': STATION_KO.get(n) or ja_company(n), 'ja': n} if STATION_KO.get(n) else {'ko': ja_company(n) if re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', n) else n, 'ja': n, 'auto': 1}
 
-JOB_KO = {'Voice Actor': '성우', 'Voice Actress': '성우', 'Actor': '배우', 'Actress': '배우', 'Director': '감독', 'Animator': '애니메이터', 'Musician': '음악가',
+JOB_KO = {'Scriptwriter': '각본가', 'Screenwriter': '각본가', 'Writer': '작가', 'Storyboard Artist': '콘티 작가', 'Voice Actor': '성우', 'Voice Actress': '성우', 'Actor': '배우', 'Actress': '배우', 'Director': '감독', 'Animator': '애니메이터', 'Musician': '음악가',
  'Singer': '가수', 'Composer': '작곡가', 'Lyricist': '작사가', 'Arranger': '편곡가', 'Illustrator': '일러스트레이터', 'Mangaka': '만화가', 'Manga Artist': '만화가',
  'Screenwriter': '각본가', 'Writer': '작가', 'Novelist': '소설가', 'Producer': '프로듀서', 'Character Designer': '캐릭터 디자이너', 'Storyboard Artist': '콘티 작가',
  'Art Director': '미술감독', 'Sound Director': '음향감독', 'Narrator': '내레이터', 'Seiyuu': '성우', 'Band': '밴드', 'Idol': '아이돌', 'Comedian': '코미디언',

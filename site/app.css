@@ -243,7 +243,7 @@ html{touch-action:manipulation}
 .stag{display:inline-block;vertical-align:.12em;font-size:.68em;font-weight:800;line-height:1;padding:.32em .5em;border-radius:6px;background:var(--chip);color:var(--ink);white-space:nowrap;margin-left:.15em}
 .shead img.pf{width:84px;aspect-ratio:1}
 .vafilt{margin-bottom:10px}
-.hbars .bar[data-vatog]{cursor:pointer}
+.hbars .bar[data-tog]{cursor:pointer}
 .valist{grid-column:1/-1;margin:2px 0 8px;padding:8px 10px;border-radius:10px;background:var(--bg);display:grid;gap:6px}
 .valist[hidden]{display:none}
 .varow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}

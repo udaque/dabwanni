@@ -70,6 +70,8 @@ if __name__ == '__main__':
         for n, (title, text) in enumerate(rows(path)):
             if n % 100000 == 0: run.say(f'문서 {n}')
             if not title or text.startswith('#redirect') or text.startswith('#넘겨주기'): continue
+            # 하위 문서(「아이돌 타임 프리파라/방영 목록」, 「…/애니메이션/1982년」)와 목록·등장인물 문서는 그 대상의 이름이 아니라서 색인에 넣지 않음
+            if '/' in title or re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', title): continue
             head = text[:2500]; cands = set()
             for m in PAREN.finditer(head):
                 for part in re.split(r'[/,、;·]', m.group(1)):
