@@ -1,8 +1,8 @@
 """しょぼいカレンダー: 일본 방송국·첫 방송 시각, 회차 부제, 주제가·삽입곡(가수·작사·작곡·편곡), 캐스트.
 2000년대 이후 TV 작품에 강합니다. 카탈로그의 syobocal TID(kawaiioverflow/arm 매핑)를 씁니다."""
 import sys, re, xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
 from common import *
+from datetime import datetime, timedelta     # common을 먼저 불러야 함: common의 「import datetime」(모듈)이 이 이름을 덮어써 strptime 오류가 났음
 
 DB = 'https://cal.syoboi.jp/db.php?'
 WD = '월화수목금토일'

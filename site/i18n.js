@@ -4,7 +4,7 @@ const I18N = {
   '한국어': ['韓国語', 'Korean'],
   // 탭 (짧게)
   '탭:분기별': ['クール', 'Season'], '탭:전체': ['すべて', 'All'], '탭:보는 중': ['視聴中', 'Watching'], '탭:봤음': ['視聴済', 'Watched'],
-  '탭:관심': ['気になる', 'Want'], '탭:통계': ['統計', 'Stats'], '탭:설정': ['設定', 'Settings'],
+  '탭:관심': ['気になる', 'Want'], '탭:통계': ['統計', 'Stats'], '탭:기록': ['記録', 'Log'], '탭:설정': ['設定', 'Settings'],
   // 머리말·탭·검색
   '작품·인물·제작사 검색': ['作品・人物・制作会社を検索', 'Search titles, people, studios'],
   '검색어 지우기': ['検索語を消す', 'Clear search'],
@@ -51,7 +51,7 @@ const I18N = {
   '많이 본 감독': ['よく見る監督', 'Top directors'], '많이 본 성우': ['よく見る声優', 'Top voice actors'], '많이 본 음악 담당': ['よく見る音楽担当', 'Top composers'],
   '많이 들은 주제가 가수': ['よく聴く主題歌アーティスト', 'Top theme song artists'], '많이 본 각본가': ['よく見る脚本家', 'Top writers'],
   '많이 본 캐릭터 디자이너': ['よく見るキャラクターデザイナー', 'Top character designers'],
-  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '시청처': ['視聴先', 'Watching on'], '라프텔': ['Laftel', 'Laftel'], '크런치롤': ['クランチロール', 'Crunchyroll'], '넷플릭스': ['Netflix', 'Netflix'], '티빙': ['TVING', 'TVING'], '아마존 프라임': ['Prime Video', 'Prime Video'], '왓챠': ['WATCHA', 'Watcha'], '웨이브': ['Wavve', 'Wavve'], '디즈니+': ['Disney+', 'Disney+'], '쿠팡플레이': ['Coupang Play', 'Coupang Play'], '유튜브': ['YouTube', 'YouTube'], '안 본 회차 제목 가리기': ['未視聴話のタイトルを隠す', 'Hide titles of unwatched episodes'], '켜기': ['オン', 'On'], '끄기': ['オフ', 'Off'], '기타': ['その他', 'Other'], '추가': ['追加', 'Add'], '서비스 이름': ['サービス名', 'Service name'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
+  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '시청처': ['視聴先', 'Watching on'], '라프텔': ['Laftel', 'Laftel'], '크런치롤': ['クランチロール', 'Crunchyroll'], '넷플릭스': ['Netflix', 'Netflix'], '티빙': ['TVING', 'TVING'], '아마존 프라임': ['Prime Video', 'Prime Video'], '왓챠': ['WATCHA', 'Watcha'], '웨이브': ['Wavve', 'Wavve'], '디즈니+': ['Disney+', 'Disney+'], '쿠팡플레이': ['Coupang Play', 'Coupang Play'], '유튜브': ['YouTube', 'YouTube'], '시청 달력': ['視聴カレンダー', 'Watch calendar'], '이전 달': ['前の月', 'Previous month'], '다음 달': ['次の月', 'Next month'], '최근 30일': ['直近30日', 'Last 30 days'], '요일별': ['曜日別', 'By weekday'], '기록 지우기': ['記録を削除', 'Delete entry'], '날짜 정리': ['日付の整理', 'Clean up dates'], '비우기': ['消す', 'Clear'], '정리할 날짜가 없습니다.': ['整理する日付はありません。', 'Nothing to clean up.'], '안 본 회차 제목 가리기': ['未視聴話のタイトルを隠す', 'Hide titles of unwatched episodes'], '켜기': ['オン', 'On'], '끄기': ['オフ', 'Off'], '기타': ['その他', 'Other'], '추가': ['追加', 'Add'], '서비스 이름': ['サービス名', 'Service name'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
   // 상세
   '시작한 날': ['見始めた日', 'Started'], '다 본 날': ['見終えた日', 'Finished'], '다시 본 횟수': ['見返した回数', 'Rewatches'], '메모': ['メモ', 'Notes'],
   '기본 정보': ['基本情報', 'Overview'], '방영 시기': ['放送時期', 'Aired'], '형식': ['形式', 'Format'], '화수': ['話数', 'Episodes'],
@@ -161,6 +161,7 @@ const FMT = {
   quarterMonths: {ko: q => ['1~3월', '4~6월', '7~9월', '10~12월'][q - 1], ja: q => ['1〜3月', '4〜6月', '7〜9月', '10〜12月'][q - 1], en: q => ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]},
   units: {ko: {d: '일', h: '시간', m: '분', s: '초'}, ja: {d: '日', h: '時間', m: '分', s: '秒'}, en: {d: 'd', h: 'h', m: 'min', s: 'sec'}},
   times: {ko: n => `${n}회`, ja: n => `${n}回`, en: n => `${n}×`},
+  works: {ko: n => `${n}편`, ja: n => `${n}作品`, en: n => `${n} titles`},
   delItem: {ko: s => `${s} 지우기`, ja: s => `${s}を削除`, en: s => `Remove ${s}`},
   score: {ko: n => `${n}점 <span class="s">(AniList 100점 만점)</span>`, ja: n => `${n}点 <span class="s">（AniList 100点満点）</span>`, en: n => `${n} <span class="s">/ 100 on AniList</span>`},
   popularity: {ko: n => `${n}명이 목록에 담음`, ja: n => `${n}人がリストに追加`, en: n => `on ${n} lists`},

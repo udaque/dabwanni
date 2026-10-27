@@ -20,14 +20,18 @@ const F = (k, v) => FMT[k][S.lang === 'ko' ? 'ko' : S.lang](v);
 const UL = () => FMT.units[S.lang] || FMT.units.ko;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtN = n => Number(n).toLocaleString('ko-KR');
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };   // 기기 시간대 기준 날짜
+// 시청 기록: + 를 한 번 눌러 한 화 올린 것만 [날짜, 작품, 화] 로 남김 (길게 눌러 여러 화·회차 목록에서 한꺼번에·「봤음」은 예전 것 정리로 보고 남기지 않음)
+function logLive(k){ const m = M(k), w = BYK.get(k), tot = total(w); if (!m.ep) return; wlog.push([today(), k, m.ep]); if (!m.start) m.start = today(); if (tot && m.ep >= tot && !m.end) m.end = today(); store.set('wlog', wlog); save(); }
+function logUndo(k, ep){ for (let i = wlog.length - 1; i >= 0; i--) if (wlog[i][1] === k && wlog[i][2] === ep) { wlog.splice(i, 1); store.set('wlog', wlog); return; } }
 const store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
 
 let W = [], BYK = new Map(), STUDIOS = [], TAGS = [], IDX = {people:null, studios:null}, usedAuto = false;
-const marks = store.get('marks', {});   // {k: {w,i,ep,rate,memo,re,start,end}}
+const marks = store.get('marks', {});
+const wlog = store.get('wlog', []);   // 시청 기록 [[날짜, 작품, 화], …]   // {k: {w,i,ep,rate,memo,re,start,end}}
 const S = { tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
 
 /* ---------- 데이터 ---------- */
@@ -208,10 +212,10 @@ function onClick(e){
       const m = M(k);
       if (act === 'i' && m.i && (m.w || m.ep)) return;            // 봤음·보는 중인 작품은 늘 관심
       m[act] ? delete m[act] : (m[act] = 1);
-      if (act === 'w' && m.w) { const tot = total(BYK.get(k)); if (tot) m.ep = tot; if (!m.start) m.start = today(); if (!m.end) m.end = today(); m.i = 1; }
+      if (act === 'w' && m.w) { const tot = total(BYK.get(k)); if (tot) m.ep = tot; m.i = 1; }      // 날짜는 자동으로 채우지 않음 (몰아서 체크한 날이 본 날로 섞이지 않게)
       save(); refresh(k); return;
     }
-    if ((act === 'ep+' || act === 'ep-') && e.detail === 0 && !e.pointerType) { setEp(k, (M(k).ep || 0) + (act === 'ep+' ? 1 : -1)); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
+    if ((act === 'ep+' || act === 'ep-') && e.detail === 0 && !e.pointerType) { const before = M(k).ep || 0; setEp(k, before + (act === 'ep+' ? 1 : -1)); if ((M(k).ep || 0) > before) logLive(k); else if ((M(k).ep || 0) < before) logUndo(k, before); refresh(k); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
     if (act === 'whereOpen') { openWhere(el, k); return; }
     if (act === 'wherePick') { const m = M(k), v = el.dataset.v; m.where === v ? delete m.where : (m.where = v); save(); closeWhere(); refresh(k); return; }
     if (act === 'whereDel') { const v = el.dataset.v; store.set('whereCustom', whereCustom().filter(x => x !== v)); for (const kk in marks) if (marks[kk].where === v) delete marks[kk].where; save(); refresh(k); const menu = el.closest('.wmenu'); if (menu) menu.innerHTML = whereMenu(k); return; }
@@ -251,13 +255,20 @@ function holdStart(e){
   const k = b.dataset.k, d = b.dataset.act === 'ep+' ? 1 : -1;
   holdStop();
   const step = () => setEp(k, (M(k).ep || 0) + d);
+  const before = M(k).ep || 0;
   step();
   let delay = 400, n = 0;
-  const tick = () => { step(); n++; delay = Math.max(40, 220 * Math.pow(0.85, n)); hold.t = setTimeout(tick, delay); };
-  hold = {b, t: setTimeout(tick, delay)};
+  const tick = () => { hold.bulk = true; step(); n++; delay = Math.max(40, 220 * Math.pow(0.85, n)); hold.t = setTimeout(tick, delay); };
+  hold = {b, k, d, before, t: setTimeout(tick, delay)};
   b.setPointerCapture?.(e.pointerId);
 }
-function holdStop(){ if (hold) { clearTimeout(hold.t); hold = null; } }
+function holdStop(){
+  if (!hold) return;
+  clearTimeout(hold.t);
+  const {k, d, before, bulk} = hold, now = M(k).ep || 0; hold = null;
+  if (!bulk && d > 0 && now > before) { logLive(k); refresh(k); }            // 한 번 눌러 한 화: 오늘 본 것으로 기록
+  if (!bulk && d < 0 && now < before) logUndo(k, before);                   // 잘못 눌러 되돌림: 그 화 기록을 지움
+}
 /* ---------- 통계 ---------- */
 const AVG_MIN = {T: 24, O: 15, V: 30, S: 24, M: 100, X: 24};   // 1화 길이를 모르는 작품의 어림값(분)
 function fmtDHM(min){
@@ -268,6 +279,52 @@ function fmtDHM(min){
 const hbarRow = (label, parts, max, total) => { const sum = parts.reduce((s, [, n]) => s + n, 0) || 1;
   return `<span class="lab">${label}</span><span class="bar"><span class="fill" style="width:${(sum / max * 100).toFixed(2)}%">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / sum * 100).toFixed(2)}%"></i>` : '').join('')}</span></span><span class="num">${fmtN(total)}</span>`; };
 let statsBy = 'q', statsTok = 0, dropN = 0;
+// 달력: 날마다 본 화수, 날짜를 누르면 그날 본 작품·회차 (지우기 가능)
+let calY = null, calM = null, calSel = null;
+const WD = () => S.lang === 'ja' ? ['日', '月', '火', '水', '木', '金', '土'] : S.lang === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['일', '월', '화', '수', '목', '금', '토'];
+// 설정 「날짜 정리」: 한꺼번에 체크하며 자동으로 찍힌 날짜(같은 날짜에 5편 이상)를 날짜 단위로 비움
+function renderDateFix(){
+  const cnt = new Map();
+  for (const m of Object.values(marks)) for (const f of ['start', 'end']) if (m[f]) cnt.set(m[f], (cnt.get(m[f]) || new Set()).add(m));
+  const rows = [...cnt].map(([d, s]) => [d, s.size]).filter(([, n]) => n >= 5).sort((a, b) => b[1] - a[1]);
+  $('#setDates').innerHTML = rows.length ? rows.map(([d, n]) => `<div class="drow"><span>${d}</span><span class="pill">${F('works', n)}</span><button data-dfix="${d}">${t('비우기')}</button></div>`).join('') : `<p class="setnote">${t('정리할 날짜가 없습니다.')}</p>`;
+  $('#setDates').onclick = e => { const b = e.target.closest('[data-dfix]'); if (!b) return; const d = b.dataset.dfix; for (const m of Object.values(marks)) { if (m.start === d) delete m.start; if (m.end === d) delete m.end; } save(); renderDateFix(); };
+}
+function logHTML(){
+  const now = new Date(); if (calY === null) { calY = now.getFullYear(); calM = now.getMonth(); }
+  const byDay = new Map(); for (const [d] of wlog) byDay.set(d, (byDay.get(d) || 0) + 1);
+  const pad = n => String(n).padStart(2, '0'), ym = `${calY}-${pad(calM + 1)}`;
+  const first = new Date(calY, calM, 1).getDay(), days = new Date(calY, calM + 1, 0).getDate(), td = today();
+  let cells = WD().map((x, i) => `<span class="cwd ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${x}</span>`).join('');
+  for (let i = 0; i < first; i++) cells += '<span></span>';
+  for (let d = 1; d <= days; d++) {
+    const ds = `${ym}-${pad(d)}`, n = byDay.get(ds) || 0;
+    cells += `<button class="cday ${n ? 'has' : ''} ${ds === td ? 'today' : ''} ${ds === calSel ? 'sel' : ''}" data-day="${ds}"${n ? '' : ' disabled'}><span class="dn">${d}</span>${n ? `<span class="cn">${n}</span>` : ''}</button>`;
+  }
+  const monthN = wlog.filter(([d]) => d.startsWith(ym)).length;
+  let h = `<div class="stbox"><h2>${t('시청 달력')}<span class="pill">${fmtN(monthN)}</span></h2>
+    <div class="calnav"><button data-cal="-1" aria-label="${t('이전 달')}">‹</button><b>${S.lang === 'en' ? `${calY}-${pad(calM + 1)}` : `${calY}${S.lang === 'ja' ? '年' : '년'} ${calM + 1}${S.lang === 'ja' ? '月' : '월'}`}</b><button data-cal="1" aria-label="${t('다음 달')}">›</button></div>
+    <div class="cal">${cells}</div>`;
+  if (calSel) {
+    const items = wlog.map((x, i) => [x, i]).filter(([[d]]) => d === calSel);
+    h += `<div class="calday"><h3>${calSel}</h3>${items.length ? items.map(([[, k, ep], i]) => { const w = BYK.get(k); return `<div class="lrow"><button class="link" data-act="open" data-k="${esc(k)}">${esc(w ? bareTitle(title(w), w) : k)}</button><span class="pill">${esc(F('epNo', ep))}</span><button class="ldel" data-logdel="${i}" aria-label="${t('기록 지우기')}">✕</button></div>`; }).join('') : `<p class="stempty">${t('아직 기록이 없습니다.')}</p>`}</div>`;
+  }
+  h += '</div>';
+  // 최근 30일 (날짜별)
+  const D = []; for (let i = 29; i >= 0; i--) { const x = new Date(now - i * 864e5); const ds = new Date(x - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); D.push([ds, byDay.get(ds) || 0, x.getDay()]); }
+  const dmax = Math.max(1, ...D.map(x => x[1]));
+  h += `<div class="stbox"><h2>${t('최근 30일')}<span class="pill">${fmtN(D.reduce((s, x) => s + x[1], 0))}</span></h2><div class="cols">${D.map(([ds, n, wd], i) => `<span class="col" title="${ds} ${n}"><i style="height:${(n / dmax * 100).toFixed(1)}%"></i><em class="${wd === 0 ? 'sun' : ''}">${(29 - i) % 7 === 0 ? `${+ds.slice(5, 7)}/${+ds.slice(8)}` : ''}</em></span>`).join('')}</div></div>`;
+  // 요일별
+  const W = [0, 0, 0, 0, 0, 0, 0]; for (const [d] of wlog) W[new Date(d + 'T00:00').getDay()]++;
+  const wmax = Math.max(1, ...W);
+  h += `<div class="stbox"><h2>${t('요일별')}</h2><div class="hbars">${W.map((n, i) => hbarRow(WD()[i], [['w', n]], wmax, n)).join('')}</div></div>`;
+  return h;
+}
+function bindLog(){
+  $('#stats').querySelectorAll('[data-cal]').forEach(b => b.onclick = () => { calM += +b.dataset.cal; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } calSel = null; renderStats(); });
+  $('#stats').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calSel = calSel === b.dataset.day ? null : b.dataset.day; renderStats(); });
+  $('#stats').querySelectorAll('[data-logdel]').forEach(b => b.onclick = () => { wlog.splice(+b.dataset.logdel, 1); store.set('wlog', wlog); renderStats(); });
+}
 // 막대를 누르면 그 아래에 해당 작품들이 펼쳐짐 (상태 색 점 + 제목, 필요하면 덧붙임 말)
 const stDot = m => m.w ? 'w' : m.ep ? 'g' : 'i';
 function drill(row, items, extra){
@@ -282,7 +339,8 @@ function renderStats(){
   const L = [];
   for (const [k, m] of Object.entries(marks)) { const w = BYK.get(k); if (w && (m.w || m.i || m.ep || m.rate)) L.push([w, m]); }
   const watched = L.filter(([, m]) => m.w), watching = L.filter(([, m]) => m.ep && !m.w), want = L.filter(([, m]) => m.i || m.w || m.ep);
-  if (!L.length) { $('#stats').innerHTML = `<div class="stbox"><p class="stempty">${t('아직 기록이 없습니다.')}</p></div>`; return; }
+  if (!L.length && !wlog.length) { $('#stats').innerHTML = `<div class="stbox"><p class="stempty">${t('아직 기록이 없습니다.')}</p></div>`; return; }
+  if (!L.length) { $('#stats').innerHTML = logHTML(); bindLog(); return; }
 
   // 본 화수·시간 (다시 본 횟수 포함, 1화 길이를 모르면 형식별 어림값)
   let eps = 0, min = 0;
@@ -348,7 +406,8 @@ function renderStats(){
   h += one(t('많이 본 장르·태그'), byTag);
   h += one(t('많이 본 제작사'), byStudio);
   h += `<div id="stPeople">${B.length ? `<div class="stbox"><p class="stempty">${t('불러오는 중')}</p></div>` : ''}</div>`;
-  $('#stats').innerHTML = h;
+  $('#stats').innerHTML = logHTML() + h;
+  bindLog();
   $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
   peopleStats(B, ++statsTok);
   $('#stBy').onclick = e => { const b = e.target.closest('[data-by]'); if (!b) return; statsBy = b.dataset.by; renderStats(); };
@@ -456,8 +515,7 @@ function setEp(k, n){
   n = Math.max(0, tot ? Math.min(n, tot) : n);
   m.ep = n || undefined; if (!n) delete m.ep;
   if (n > 0) m.i = 1;
-  if (n > 0 && !m.start) m.start = today();
-  if (tot && n >= tot) { m.w = 1; if (!m.end) m.end = today(); }
+  if (tot && n >= tot) m.w = 1;
   save(); refresh(k);
 }
 function refresh(k){
@@ -505,6 +563,7 @@ function render(){
     document.querySelectorAll('#setLang [data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === S.lang));
     document.querySelectorAll('#setTheme [data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === (S.theme || 'system')));
     document.querySelectorAll('#setEpHide [data-ephide]').forEach(b => b.classList.toggle('on', (b.dataset.ephide === '1') === S.epHide));
+    renderDateFix();
     return;
   }
   const seasonMode = S.tab === 'season' && !S.q;

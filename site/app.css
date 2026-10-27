@@ -279,3 +279,29 @@ html{touch-action:manipulation}
 
 /* 안 본 회차 제목 가리기 */
 .ttl.spoil{filter:blur(5px);user-select:none;-webkit-user-select:none;pointer-events:none}
+
+/* 시청 달력 */
+.calnav{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
+.calnav b{font-size:16px}
+.calnav button{width:36px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:18px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cwd{font-size:12px;color:var(--sub);padding:2px 0}.cwd.sun{color:var(--onair)}.cwd.sat{color:#5b8def}
+.cday{position:relative;aspect-ratio:1/1;border:0;border-radius:10px;background:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0;font-size:13px}
+.cday.has{color:var(--ink);background:var(--chip)}
+.cday.today .dn{font-weight:800;color:var(--ink);text-decoration:underline}
+.cday.sel{outline:2px solid var(--ink)}
+.cday .cn{min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--onair);color:#fff;font-size:12px;font-weight:700;line-height:20px}
+.calday{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.calday h3{margin:0 0 6px;font-size:15px}
+.lrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.lrow .link{flex:1;text-align:left;background:none;border:0;padding:0;color:var(--ink);font-size:15px}
+.ldel{flex:none;width:30px;height:30px;border:0;border-radius:6px;background:none;color:var(--sub)}
+/* 최근 30일 세로 막대 */
+.cols{display:flex;align-items:flex-end;gap:2px;height:120px}
+.col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;min-width:0}
+.col i{display:block;width:100%;background:var(--onair);border-radius:3px 3px 0 0;min-height:0}
+.col em{font-style:normal;font-size:10px;color:var(--sub);height:13px;white-space:nowrap;overflow:visible}.col em.sun{color:var(--onair)}
+/* 설정: 날짜 정리 */
+.drow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.drow span:first-child{flex:1}
+.drow button{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-weight:600;white-space:nowrap}
