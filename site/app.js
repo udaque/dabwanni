@@ -1,6 +1,6 @@
 'use strict';
-const TYPE = {T:'TV', O:'웹', V:'OVA', S:'스페셜', M:'극장판', X:'미분류'};
-const TYPE_ORDER = ['T','O','V','S','M','X'];
+const TYPE = {T:'TV', O:'웹', V:'OVA', S:'스페셜', M:'극장판', X:'미분류', P:'뮤직비디오'};
+const TYPE_ORDER = ['T','O','V','S','M','X','P'];
 const QL = {1:'1분기', 2:'2분기', 3:'3분기', 4:'4분기'};
 const QM = {1:'1~3월', 2:'4~6월', 3:'7~9월', 4:'10~12월'};
 const LEN = {short:'숏 (5분 이하)', half:'하프 (6~17분)', normal:'일반 (18~35분)', long:'장편 (36분 이상)'};
@@ -495,7 +495,8 @@ function render(){
       <button data-act="wscope" data-v="w" class="${WSCOPE.w ? 'on' : ''}"><i class="dot w"></i>${t('봤음')}</button></div>` : '') +
     TYPE_ORDER.filter(ty => tc[ty]).map(ty => `<button class="chip ${S.types.has(ty) ? 'on' : ''}" data-act="type" data-v="${ty}">${t(TYPE[ty])}<span class="pill">${fmtN(tc[ty])}</span></button>`).join('') +
     Object.keys(LEN).filter(l => lc[l]).map(l => `<button class="chip ${S.lens.has(l) ? 'on' : ''}" data-act="len" data-v="${l}">${t(LEN[l])}<span class="pill">${fmtN(lc[l])}</span></button>`).join('');
-  let L = base.filter(w => (!S.types.size || S.types.has(w.ty)) && (!S.lens.size || S.lens.has(w.lk)));
+  // 뮤직비디오는 형식 거르개에서 직접 고를 때만 보임 (기록이 있는 것은 보는 중·봤음·관심 탭에서 그대로 보임)
+  let L = base.filter(w => (S.types.size ? S.types.has(w.ty) : (w.ty !== 'P' || ['watching', 'watched', 'want'].includes(S.tab))) && (!S.lens.size || S.lens.has(w.lk)));
   let html = S.q ? idxResults(S.q, 'people', t('인물'), 'person', 'p') + idxResults(S.q, 'studios', t('제작사'), 'studio', 's') : '';
   const hasIdx = html !== '';
   if (seasonMode) {

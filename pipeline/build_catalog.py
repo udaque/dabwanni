@@ -53,9 +53,18 @@ def pick(t,lang,types=('official','main','syn')):
         if t.get((lang,ty)): return t[(lang,ty)][0]
 SEAS={'WINTER':1,'SPRING':2,'SUMMER':3,'FALL':4}
 # ── AniList 분기 목록으로 보충 (manami 원천이 7월 판에서 멈춘 동안 새로 발표된 작품과 바뀐 시기·상태·화수) ──
-FMT={'TV':'TV','TV_SHORT':'TV','ONA':'ONA','OVA':'OVA','SPECIAL':'SPECIAL','MOVIE':'MOVIE','MUSIC':'SPECIAL'}
+FMT={'TV':'TV','TV_SHORT':'TV','ONA':'ONA','OVA':'OVA','SPECIAL':'SPECIAL','MOVIE':'MOVIE','MUSIC':'MUSIC'}
 STAT={'FINISHED':'FINISHED','RELEASING':'ONGOING','NOT_YET_RELEASED':'UPCOMING','HIATUS':'ONGOING','CANCELLED':'FINISHED'}
 SEAS_OF={1:'WINTER',2:'SPRING',3:'SUMMER',4:'FALL'}
+TYCODE={'TV':'T','ONA':'O','OVA':'V','SPECIAL':'S','MOVIE':'M','MUSIC':'S','UNKNOWN':'X'}
+def is_music_video(x):
+    """노래 한 곡짜리 뮤직비디오(보컬로이드 곡 영상 등): 스페셜·웹·미분류이면서 1~2화, 10분 이하이고 「music」·「vocaloid」 표시가 있는 것.
+    화수를 아직 모르는 신작(0화)은 보컬로이드 표시가 있을 때만."""
+    t=set(x.get('tags') or []); d=(x.get('duration') or {}).get('value') or 0; e=x.get('episodes') or 0
+    if x.get('type')=='MUSIC': return True
+    if x.get('type') not in ('SPECIAL','ONA','UNKNOWN') or e>2 or (d and d>600): return False
+    if e==0: return 'vocaloid' in t
+    return 'vocaloid' in t or 'music' in t
 def from_anilist(m):
     sd=m.get('startDate') or {}
     yr=sd.get('year') or m.get('seasonYear'); sea=SEAS_OF[(sd['month']-1)//3+1] if sd.get('month') else (m.get('season') or 'UNDEFINED')
@@ -123,12 +132,13 @@ for x in a:
     elif 'anilist' in pic: pic='A'+pic
     elif 'nopicture' in pic or 'no_pic' in pic: pic=''
     tm=(f or {}).get('themoviedb_id') or {}
-    rec=dict(k=k,_syn=[y for y in x['synonyms'] if not hangul.search(y)][:40],r=ro,ja=ja,ko=ko,en=en,ty=x['type'][0] if x['type']!='UNKNOWN' else 'X',
+    rec=dict(k=k,_syn=[y for y in x['synonyms'] if not hangul.search(y)][:40],r=ro,ja=ja,ko=ko,en=en,ty=TYCODE.get(x['type'],'X'),
         y=x['animeSeason'].get('year'),q=SEAS.get(x['animeSeason'].get('season')),
         e=x['episodes'],d=dur,st=x['status'][0],p=pic,stu=x['studios'][:3],
         al=al,mal=mal,adb=adb,tmdb=tm.get('tv') if isinstance(tm,dict) else None,tms=((f or {}).get('season') or {}).get('tmdb'),
         rel=[r for r in x['relatedAnime']],
         net=1 if 'netflix original' in tags or 'netflix' in tags else 0)
+    rec['_mv']=is_music_video(x)                         # 뮤직비디오 표시 (합친 뒤에 형식을 P로 바꿈: 합치기 규칙은 원래 형식으로)
     m=arm.get(('al',al)) or arm.get(('mal',mal)) or {}
     rec['sy']=m.get('syobocal_tid'); rec['an']=m.get('annict_id')
     b=bgm.get(('al',al)) or bgm.get(('mal',mal)) or {}
@@ -260,6 +270,45 @@ for (kind, *rest), idx in sorted(buckets.items(), key=lambda kv: kv[0][0] != 'tb
                 if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue
                 if not a['y'] or not (nja(a['ja']) == rest[0] or nja(b['ja']) == rest[0]): continue
             union(ia, ib)
+# ── 전수 점검으로 찾은 남은 중복: 한쪽이 보조 출처 항목이고 제목이 거의 같은 것 ──
+# 같은 해, 제목 유사도 0.92 이상, 번호 같음, 「前編·総集編·OP·CM」 같은 편 표시가 같음, TV와 극장판처럼 성격이 다르지 않을 것
+import difflib
+PART_MARK = re.compile(r'(前編|後編|中編|総集編|特別編|番外編|おまけ|お負け|omake|recap|OP|ED|CM|PV|予告|ティザー|teaser|trailer|劇場版|映画|movie|special|specials|picture drama|ova|oad)', re.I)
+def _nj2(t): return nja(t)
+def _sim(a, b):
+    s = 0
+    ja_, jb = _nj2(a['ja']), _nj2(b['ja'])
+    if len(ja_) >= 4 and len(jb) >= 4: s = max(s, difflib.SequenceMatcher(None, ja_, jb).ratio())
+    ra, rb = nro(a['r']), nro(b['r'])
+    if len(ra) >= 6 and len(rb) >= 6: s = max(s, difflib.SequenceMatcher(None, ra, rb).ratio())
+    return s
+def _marks(r): return {m.lower() for m in PART_MARK.findall(unicodedata.normalize('NFKC', ' '.join(x for x in (r['ja'], r['r'], r.get('en')) if x)))}
+fz_blocks = collections.defaultdict(set)
+for i, r in enumerate(out):
+    if not r['y']: continue
+    j, ro_ = _nj2(r['ja']), nro(r['r'])
+    if len(j) >= 4: fz_blocks[(r['y'], 'j', j[:3])].add(i)
+    if len(ro_) >= 6: fz_blocks[(r['y'], 'r', ro_[:4])].add(i)
+n_fz = 0
+for key, idx in fz_blocks.items():
+    idx = sorted(idx)
+    if len(idx) > 60: continue
+    for x_ in range(len(idx)):
+        for y_ in range(x_ + 1, len(idx)):
+            a, b = out[idx[x_]], out[idx[y_]]
+            if find(idx[x_]) == find(idx[y_]): continue
+            if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue      # 둘 다 번호 있으면 원천이 다른 작품으로 본 것
+            if a.get('_mv') != b.get('_mv'): continue
+            if {a['ty'], b['ty']} & {'T'} and {a['ty'], b['ty']} & {'M'}: continue   # TV 시리즈와 극장판 총집편은 다른 작품
+            if a['q'] and b['q'] and abs(a['q'] - b['q']) > 1: continue
+            if (a['e'] or 0) > 2 and (b['e'] or 0) > 2 and abs(a['e'] - b['e']) > 3: continue
+            if digits(a) != digits(b) or _marks(a) != _marks(b): continue
+            # 「~Prelude~」와 「~Interlude~」처럼 끝이 다른 별개 편을 막으려고: 아주 비슷하거나(0.95), 괄호 덧붙임만 다를 때
+            br = lambda t: bool(re.search(r'[\(（\[【]', t or ''))
+            same_bare = nbare(a['ja']) and nbare(a['ja']) == nbare(b['ja']) and not (br(a['ja']) and br(b['ja']))   # 둘 다 괄호가 있으면 다른 판(UG 파트·SATORU 파트)
+            if _sim(a, b) >= 0.95 or same_bare: union(idx[x_], idx[y_]); n_fz += 1
+print('비슷한 제목 보조 항목 합침', n_fz)
+
 groups = collections.defaultdict(list)
 for i in range(len(out)): groups[find(i)].append(i)
 def rank(r): return (bool(r['al']), bool(r['mal']), bool(r['adb']), r['p'][:1] in ('M', 'A'))
@@ -276,11 +325,16 @@ for g in groups.values():
         m['tags'] = m['tags'] + [t for t in o['tags'] if t not in m['tags']]
         m.setdefault('_alias', []).append(o['k']); m['_syn'] = m.get('_syn', []) + o.get('_syn', [])
     merged.append(m)
+for r in merged:
+    # 뮤직비디오: 대표 항목이 뮤직비디오이고 스페셜·웹·미분류·뮤직이면 형식을 P로
+    if r.get('_mv') and r['ty'] in ('S', 'O', 'X', 'P'): r['ty'] = 'P'
+    elif r['ty'] == 'P': r['ty'] = 'S'
+print('뮤직비디오로 분류', sum(1 for r in merged if r['ty'] == 'P'))
 print('중복 합치기:', len(out), '→', len(merged))
 out = merged
 key2i = {r['k']: i for i, r in enumerate(out)}
 alias = {a: r['k'] for r in out for a in r.get('_alias', [])}
-for r in out: r.pop('_alias', None); r.pop('_syn', None)
+for r in out: r.pop('_alias', None); r.pop('_syn', None); r.pop('_mv', None)
 
 # resolve relations to keys
 url2k={}
