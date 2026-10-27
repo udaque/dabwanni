@@ -275,7 +275,21 @@ for (kind, *rest), idx in sorted(buckets.items(), key=lambda kv: kv[0][0] != 'tb
 # ── 전수 점검으로 찾은 남은 중복: 한쪽이 보조 출처 항목이고 제목이 거의 같은 것 ──
 # 같은 해, 제목 유사도 0.92 이상, 번호 같음, 「前編·総集編·OP·CM」 같은 편 표시가 같음, TV와 극장판처럼 성격이 다르지 않을 것
 import difflib
-PART_MARK = re.compile(r'(前編|後編|中編|総集編|特別編|番外編|おまけ|お負け|omake|recap|OP|ED|CM|PV|予告|ティザー|teaser|trailer|special|specials|picture drama|ova|oad)', re.I)
+PART_MARK = re.compile(r'(前編|後編|中編|総集編|特別編|番外編|おまけ|お負け|omake|recap|OP|ED|CM|PV|予告|ティザー|teaser|trailer|special|specials|picture drama|ova|oad|パイロット|pilot|season\s*\d+|シーズン\s*\d+|시즌\s*\d+)', re.I)
+# 썸네일 그림 지문 (collect_thumbhash.py가 만든 것, 그림 주소별)
+THASH = {}
+for _f in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'raw', 'thumbhash', '*.json')):
+    try: THASH.update({k: v for k, v in json.load(open(_f, encoding='utf-8')).items() if isinstance(v, int)})
+    except Exception: pass
+_hc = collections.Counter(THASH.values()); THASH = {k: v for k, v in THASH.items() if _hc[v] < 5}     # 「이미지 없음」 같은 자리표시 그림은 뺌
+def img_same(a, b):
+    ha, hb = THASH.get(a.get('p')), THASH.get(b.get('p'))
+    return ha is not None and hb is not None and bin(ha ^ hb).count('1') <= 4
+def _sub(r):
+    """「~Prelude~」·「〜Interlude〜」 같은 부제 (둘 다 있는데 다르면 다른 편)"""
+    m = re.search(r'[~〜～]([^~〜～]+)[~〜～]', unicodedata.normalize('NFKC', r['ja'] or '').replace('~', '~'))
+    return nja(m.group(1)) if m else None
+def nko_(t): return re.sub(r'[\s·・:：\-－―~〜!！?？,，.()（）\[\]]', '', unicodedata.normalize('NFKC', t or '')).lower()
 def _nj2(t): return nja(re.sub(r'^\s*(劇場版|映画)\s*', '', unicodedata.normalize('NFKC', t or '')))     # 「クラナド」 = 「劇場版 クラナド」
 def _sim(a, b):
     s = 0
@@ -298,6 +312,8 @@ for i, r in enumerate(out):
     if q_in and len(_nj2(q_in.group(1))) >= 4: fz_blocks[(r['y'], 'j', _nj2(q_in.group(1))[:3])].add(i)
     if len(j) >= 4: fz_blocks[(r['y'], 'j', j[:3])].add(i)
     if len(ro_) >= 6: fz_blocks[(r['y'], 'r', ro_[:4])].add(i)
+    if THASH.get(r['p']) is not None: fz_blocks[(r['y'], 'h', THASH[r['p']] >> 48)].add(i)      # 그림 지문 앞부분이 같은 것끼리도 비교
+    if r.get('ko') and len(nko_(r['ko'])) >= 3: fz_blocks[(r['y'], 'k', nko_(r['ko'])[:3])].add(i)
 n_fz = 0
 for key, idx in fz_blocks.items():
     idx = sorted(idx)
@@ -331,7 +347,12 @@ for key, idx in fz_blocks.items():
             if weak_b and inner(b) and inner(b) == sa: sb = sa
             same_season = bool(sa) and sa == sb and (a.get('_sc') or sc_of(a)) == (b.get('_sc') or sc_of(b))
             if cross and not (same_season or _sim(a, b) >= 0.97): continue
-            if _sim(a, b) >= 0.95 or same_bare or same_season: union(idx[x_], idx[y_]); n_fz += 1
+            same_ko = (weak_a or weak_b) and a.get('ko') and b.get('ko') and nko_(a['ko']) == nko_(b['ko'])       # 한국 작품: 「나쁜 상사」 = 「나쁜상사」
+            ea, eb = a['e'] or 0, b['e'] or 0
+            same_img = (weak_a or weak_b) and img_same(a, b) and (a['ty'] == b['ty'] or {a['ty'], b['ty']} <= {'T', 'O'} or 'X' in (a['ty'], b['ty'])) \
+                and not (ea and eb and abs(ea - eb) > max(2, 0.2 * max(ea, eb))) \
+                and (_sim(a, b) >= 0.6 or same_ko) and _sub(a) == _sub(b)     # 그림이 거의 같고 형식·화수가 맞고 제목도 어느 정도 닮은 보조 항목 (같은 회사 틀 그림을 쓰는 다른 작품 제외)
+            if _sim(a, b) >= 0.95 or same_bare or same_season or same_ko or same_img: union(idx[x_], idx[y_]); n_fz += 1
 print('비슷한 제목 보조 항목 합침', n_fz)
 
 groups = collections.defaultdict(list)

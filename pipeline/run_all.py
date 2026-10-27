@@ -21,11 +21,12 @@ STEPS = [
  ('laftel',         ['python3', 'collect_laftel.py'], 0.05, 0),
  ('youtube',        ['python3', 'collect_youtube.py'], 0.03, 0),
  ('kowiki',         ['python3', 'collect_kowiki.py'], 0.04, 0),
+ ('thumbhash',      ['python3', 'collect_thumbhash.py'], 0.05, 0),
  ('namu',           ['python3', 'collect_namu.py'], 0.10, 25),
 ]
 # 깃허브 액션 서버에서는 막히는 출처: 집 PC에서 home_syoboi.sh(run_all.py --home)로 따로 돌림
 HOME_ONLY = {'syoboi', 'laftel', 'animethemes', 'anitabi'}      # 깃허브 서버에서는 막히는 출처들(쇼보이·라프텔·애니메테마즈 520·Anitabi 403)이라 집 PC에서
-BUDGETED = {'kowiki', 'youtube', 'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
+BUDGETED = {'thumbhash', 'kowiki', 'youtube', 'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
 
 def last_ok(name):
     p = os.path.join(ROOT, 'raw', '_runs.json')
