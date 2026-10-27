@@ -9,7 +9,7 @@ R2 열쇠: 홈 폴더의 .dabwanni.env 파일(또는 환경 변수)에 깃허브
   R2_SECRET_ACCESS_KEY=...
   R2_BUCKET=...
 실행: python home_syoboi.py [분]   (분: 수집에 쓸 최대 시간, 기본 90)
-R2에는 sync_r2.sh와 같은 형식(raw/<출처>.tar.zst)으로 주고받습니다. 집에서는 쇼보이 묶음과 카탈로그·실행 기록만 받고 올립니다."""
+R2에는 sync_r2.sh와 같은 형식(raw/<출처>.tar.zst)으로 주고받습니다. 집에서는 위 네 출처의 묶음과 카탈로그·실행 기록만 받고 올립니다."""
 import os, sys, io, json, tarfile, shutil, subprocess, datetime
 
 ROOT = os.path.dirname(os.path.abspath(__file__)); RAW = os.path.join(ROOT, 'raw')
@@ -55,11 +55,11 @@ def pack(src_dir, name):
 def main():
     budget = sys.argv[1] if len(sys.argv) > 1 else '90'
     load_env(); s3 = client(); B = os.environ['R2_BUCKET']; os.makedirs(RAW, exist_ok=True)
-    say('===== 쇼보이 수집 시작 =====')
+    say('===== 집 PC 수집 시작 (' + ', '.join(SRCS) + ') =====')
     if shutil.which('git'):
         r = subprocess.run(['git', '-C', os.path.dirname(ROOT), 'pull', '-q', '--ff-only'])
         if r.returncode: say('코드를 최신으로 받지 못했습니다 (지금 코드로 진행)')
-    # 받기: 카탈로그·실행 기록·쇼보이 묶음
+    # 받기: 카탈로그·실행 기록·출처별 묶음
     for f in ('_catalog.json', '_runs.json'):
         try: s3.download_file(B, 'raw/' + f, os.path.join(RAW, f)); say('받음:', f)
         except Exception as e: say('받지 못함:', f, '(첫 실행이면 정상)', type(e).__name__)
@@ -71,8 +71,8 @@ def main():
     # 수집 (병합·배포는 클라우드 갱신이 함)
     env = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
     r = subprocess.run([sys.executable, 'run_all.py', '--home', '--budget-min', budget], cwd=ROOT, env=env)
-    if r.returncode: say('쇼보이 수집에 실패한 항목이 있습니다 (pipeline/logs/summary.md 참고)')
-    # 올리기: 쇼보이 묶음 + 실행 기록
+    if r.returncode: say('수집에 실패한 항목이 있습니다 (pipeline/logs/summary.md 참고)')
+    # 올리기: 출처별 묶음 + 실행 기록
     for SRC in SRCS:
         if os.path.isdir(os.path.join(RAW, SRC)):
             z = pack(RAW, SRC); s3.put_object(Bucket=B, Key=f'raw/{SRC}.tar.zst', Body=z); say(f'올림: {SRC}.tar.zst ({len(z)//1024}KB)')

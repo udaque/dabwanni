@@ -56,7 +56,35 @@ Actions → 다봤니 데이터 갱신 → Run workflow. 한 번에 최대 약 5
     - `<단계>.log` 진행 기록, `<단계>.jsonl` 오류 상세(요청 주소·응답 코드·응답 앞부분·오류 위치), `<단계>.out` 출력 전체
   - 저장소의 `status/last-run.md`에 마지막 결과
 - 실패하면 「수집 실패」 이슈가 자동으로 생기고(이미 열려 있으면 댓글 추가), GitHub 앱 푸시와 메일이 옵니다.
-- 막히는 출처가 있으면 집 컴퓨터를 실행 서버(self-hosted runner)로 등록해 그 단계만 옮길 수 있습니다.
+
+## 집 PC 수집 (쇼보이 캘린더·라프텔·애니메테마즈·Anitabi)
+이 네 출처는 GitHub 서버에서 접속을 막아서, 집 PC에서 받아 R2에 올려 둡니다. 새벽 클라우드 갱신(한국 시간 3시 30분)이 그걸 내려받아 병합·배포합니다.
+
+**준비 (한 번만)**
+1. 파이썬 3.10 이상 설치
+2. 이 저장소를 받기: `git clone https://github.com/udaque/dabwanni.git` (git이 있으면 실행할 때마다 코드를 최신으로 받습니다)
+3. 라이브러리: 윈도우 `py -m pip install boto3 zstandard`, 맥 `python3 -m pip install boto3 zstandard`
+4. 홈 폴더(윈도우 `C:\Users\사용자이름`, 맥 `~`)에 `.dabwanni.env` 파일을 만들고, GitHub Secrets와 같은 값을 넣기
+   ```
+   R2_ACCOUNT_ID=...
+   R2_ACCESS_KEY_ID=...
+   R2_SECRET_ACCESS_KEY=...
+   R2_BUCKET=...
+   ```
+
+**실행**
+- 윈도우(파워셸): `pipeline\home_syoboi.ps1` 실행. 기록은 홈 폴더 `dabwanni-home.log`
+- 맥·리눅스: `pipeline/home_syoboi.sh`
+- 뒤에 숫자를 붙이면 수집에 쓸 최대 시간(분)입니다. 기본 90분.
+- 끝나면 화면에 출처별 결과표가 나오고, `pipeline/logs/summary.md`에도 남습니다.
+
+**매일 자동으로**
+- 윈도우: 파워셸에서 `pipeline` 폴더로 이동한 뒤, `home_syoboi.ps1` 맨 위 주석의 `Register-ScheduledTask …` 한 줄을 한 번 실행하면 매일 새벽 1시에 돕니다.
+- 맥: `crontab -e`에 `0 1 * * * /경로/dabwanni/pipeline/home_syoboi.sh >> ~/dabwanni-home.log 2>&1`
+
+**확인**
+- 실행 결과표에서 syoboi·laftel·animethemes·anitabi 줄이 모두 성공인지 봅니다.
+- 다음 클라우드 갱신부터 사이트에 반영됩니다. 기다리기 싫으면 Actions에서 「다봤니 데이터 갱신」을 「일부 단계만」에 catalog를 넣고 실행하면 병합·배포만 바로 합니다.
 
 ## 내 컴퓨터에서 직접 실행
 ```sh
