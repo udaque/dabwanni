@@ -150,7 +150,7 @@ for x in a:
 # 같은 AniDB ID이거나, 형식·연도가 같고 일본어 제목 또는 로마자 제목이 같으면 한 작품으로 합칩니다.
 import unicodedata
 def nja(t):
-    t = unicodedata.normalize('NFKC', t or '')
+    t = unicodedata.normalize('NFKC', t or '').lower()                  # 대소문자 무시 (「Cyber Land」·「ROAD TO THE TOP」)
     t = re.sub(r'[\(（]\s*(19|20)\d\d\s*[\)）]', '', t)          # 「タヌキとキツネ (2026)」의 연도 꼬리는 비교에서 뺌
     t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
     t = re.sub(r'^\s*(OVA|OAD|ONA|劇場版OVA)\s+', '', t)               # 「OVA ケガレボシ」 = 「ケガレボシ」
@@ -273,8 +273,8 @@ for (kind, *rest), idx in sorted(buckets.items(), key=lambda kv: kv[0][0] != 'tb
 # ── 전수 점검으로 찾은 남은 중복: 한쪽이 보조 출처 항목이고 제목이 거의 같은 것 ──
 # 같은 해, 제목 유사도 0.92 이상, 번호 같음, 「前編·総集編·OP·CM」 같은 편 표시가 같음, TV와 극장판처럼 성격이 다르지 않을 것
 import difflib
-PART_MARK = re.compile(r'(前編|後編|中編|総集編|特別編|番外編|おまけ|お負け|omake|recap|OP|ED|CM|PV|予告|ティザー|teaser|trailer|劇場版|映画|movie|special|specials|picture drama|ova|oad)', re.I)
-def _nj2(t): return nja(t)
+PART_MARK = re.compile(r'(前編|後編|中編|総集編|特別編|番外編|おまけ|お負け|omake|recap|OP|ED|CM|PV|予告|ティザー|teaser|trailer|special|specials|picture drama|ova|oad)', re.I)
+def _nj2(t): return nja(re.sub(r'^\s*(劇場版|映画)\s*', '', unicodedata.normalize('NFKC', t or '')))     # 「クラナド」 = 「劇場版 クラナド」
 def _sim(a, b):
     s = 0
     ja_, jb = _nj2(a['ja']), _nj2(b['ja'])
@@ -298,7 +298,7 @@ for key, idx in fz_blocks.items():
             a, b = out[idx[x_]], out[idx[y_]]
             if find(idx[x_]) == find(idx[y_]): continue
             if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue      # 둘 다 번호 있으면 원천이 다른 작품으로 본 것
-            if a.get('_mv') != b.get('_mv'): continue
+            if a.get('_mv') != b.get('_mv') and (a['al'] or a['mal']) == (b['al'] or b['mal']): continue   # 한쪽이 보조 항목이면 그쪽 형식 표시는 믿지 않음
             if {a['ty'], b['ty']} & {'T'} and {a['ty'], b['ty']} & {'M'}: continue   # TV 시리즈와 극장판 총집편은 다른 작품
             if a['q'] and b['q'] and abs(a['q'] - b['q']) > 1: continue
             if (a['e'] or 0) > 2 and (b['e'] or 0) > 2 and abs(a['e'] - b['e']) > 3: continue
