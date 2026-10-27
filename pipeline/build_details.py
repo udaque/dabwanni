@@ -513,6 +513,27 @@ def main():
         c['fields'].append('sm'); [r.append(None) for r in c['rows']]
     ki, si, ei, smi = c['fields'].index('ko'), c['fields'].index('st'), c['fields'].index('e'), c['fields'].index('sm'); n_ko = 0
     yi, qi = c['fields'].index('y'), c['fields'].index('q')
+    # 한국어 제목이 없는 속편(2기·2쿨 등)은 이전 시즌의 한국어 제목에 시즌 표시를 붙여 씀
+    # (예: 「魔法の姉妹ルルットリリィ 第2クール」은 1기의 「마법의 자매 루룻토 릴리」를 이어받음)
+    KO_SEASON = re.compile(r'\s*(\d+\s*기|시즌\s*\d+|\d+\s*쿨|파트\s*\d+|\d+\s*부|파이널)\s*$')
+    def inherit_ko(k, depth=0):
+        w = BY.get(k) or {}
+        if w.get('ko') or depth > 6: return w.get('ko')
+        for rr in (details.get(k) or {}).get('relations') or []:
+            if rr.get('type') == 'PREQUEL':
+                pk = inherit_ko(rr['k'], depth + 1)
+                if pk: return pk
+        return None
+    n_inh = 0
+    for r in c['rows']:
+        w = BY[r[0]]
+        if not w.get('ko') and w.get('ty') in ('T', 'O', 'M', 'S', 'V'):
+            pk = inherit_ko(r[0])
+            if pk:
+                base = pk
+                for _ in range(3): base = KO_SEASON.sub('', base).strip()
+                w['ko'] = add_season(base, w.get('ja'), w.get('r'), roman=w.get('_pre')); w['ko_inherited'] = 1; n_inh += 1
+    print(f'이전 시즌 한국어 제목 이어받음 {n_inh}편')
     for r in c['rows']:
         w = BY[r[0]]
         r[smi] = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))      # 제목 뒤 시즌·쿨 꼬리표용
