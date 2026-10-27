@@ -720,9 +720,9 @@ function workHTML(w, d){
   return h;
 }
 function epRow(w, e){
-  const m = marks[w.k] || {}, n = Number.isFinite(e.i) && e.i > 0 ? e.i : parseInt(e.no, 10), seen = n && (m.ep || 0) >= n, t = e.title || {};
+  const m = marks[w.k] || {}, n = Number.isFinite(e.i) && e.i > 0 ? e.i : parseInt(e.no, 10), seen = n && (m.ep || 0) >= n, ti = e.title || {};      // 이름을 t로 하면 번역 함수 t()를 가려 회차별 스태프가 있는 작품에서 상세 화면이 멈춤
   const order = S.lang === 'ja' ? ['ja', 'en'] : S.lang === 'en' ? ['en', 'ja'] : ['ko', 'ja', 'en'];   // 일본어·영어 화면에는 한국어 회차 제목을 안 보임
-  const tt = order.map(l => t[l]).filter(Boolean);
+  const tt = order.map(l => ti[l]).filter(Boolean);
   const lines = [];
   if (tt.length > 1) lines.push(tt.slice(1).map(esc).join(' / '));
   const meta = [e.air, e.min && e.min + (S.lang === 'en' ? ' ' : '') + UL().m].filter(Boolean).join(' ');
