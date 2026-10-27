@@ -355,7 +355,7 @@ def main():
         ko = None
         _lfs = laftel_by_studio(w, LAF, BYQ) if not w.get('ko') else None
         w['_lfs'] = _lfs
-        for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('kowiki', (ld('kowiki') or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
         if (OVR.get(k) or {}).get('ko'): ko = OVR[k]['ko']                  # 직접 정한 값이 가장 우선 (overrides.json)

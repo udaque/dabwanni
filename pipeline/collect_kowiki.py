@@ -5,7 +5,15 @@ import argparse, datetime, unicodedata
 from common import *
 
 API = 'https://ko.wikipedia.org/w/api.php'
-ANIME_WORDS = re.compile(r'(애니메이션|만화|라이트 노벨|소설|게임|작품)')
+ANIME_WORDS = re.compile(r'(애니메이션|만화|라이트 노벨|소설)')
+V = 2      # 기록 형식 판: 2부터는 첫머리 「일본어: 원제」가 원제와 똑같을 때만 씀 (1판은 원제가 일부만 들어 있어도 써서 「ブレス」에 「젤다의 전설 브레스 오브 더 와일드」가 붙었음)
+
+def original_title(head):
+    """문서 첫머리의 「(일본어: 원제 …」에서 원제만 꺼냄. 원제 뒤의 한글 읽기·쉼표·괄호 앞까지"""
+    m = re.search(r'일본어\s*:\s*([^,，)\]]+)', head)
+    if not m: return None
+    t = re.split(r'[\uac00-\ud7a3]', m.group(1))[0]
+    return t.strip()
 
 def norm(t): return re.sub(r'[\s・･·「」『』()（）\[\]【】~〜\-－―!！?？、。,，.:：/／]', '', unicodedata.normalize('NFKC', t or '')).lower()
 
@@ -27,8 +35,8 @@ if __name__ == '__main__':
     def work(w, run):
         http.run = run
         old = load('kowiki', w['k']); at = fetched_at('kowiki', w['k'])
-        if old and old.get('title'): return SKIP
-        if at and (datetime.datetime.now(datetime.timezone.utc) - at).days < 30: return SKIP
+        if old and old.get('v') == V and old.get('title'): return SKIP
+        if old and old.get('v') == V and at and (datetime.datetime.now(datetime.timezone.utc) - at).days < 30: return SKIP
         if has_ko(w): return SKIP
         ja = unicodedata.normalize('NFKC', w['ja'])
         hits = [h['title'] for h in (api(action='query', list='search', srsearch=f'"{ja}"', srnamespace=0, srlimit=4).get('search') or [])]
@@ -44,9 +52,9 @@ if __name__ == '__main__':
             ex = {p['title']: p.get('extract') or '' for p in pages}
             for h in hits:
                 head = ex.get(h, '')[:400]
-                # 첫머리에 원제가 그대로 있고, 작품 문서로 보일 때만 (인물·회사 문서가 원제를 언급하는 경우 제외)
-                if norm(ja) and norm(ja) in norm(head) and ANIME_WORDS.search(head):
+                # 첫머리 「일본어: 원제」가 찾는 원제와 똑같고, 애니메이션·만화·소설 문서일 때만
+                if norm(ja) and norm(original_title(head) or '') == norm(ja) and ANIME_WORDS.search(head):
                     title = re.sub(r'\s*\((애니메이션|만화|소설|라이트 노벨|텔레비전 애니메이션|[0-9]{4}년 애니메이션)\)\s*$', '', h).strip(); break
-        save('kowiki', w['k'], {'title': title, 'query': ja}); return {'title': title} if title else []
+        save('kowiki', w['k'], {'title': title, 'query': ja, 'v': V}); return {'title': title} if title else []
     run_source('kowiki', W, work, canary=(lambda: bool(api(action='query', list='search', srsearch='"薬屋のひとりごと"', srlimit=1).get('search')), '약사의 혼잣말 검색'),
                budget_min=a.budget_min, max_empty=None)
