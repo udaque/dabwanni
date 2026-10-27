@@ -69,7 +69,9 @@ class Names:
                 if k: self.wd_studio.setdefault(pname(k).lower(), r)
         self.wd_works = {r['mal']: r for r in load('wikidata', 'works') or []}
     def namu_one(self, ja, prefer=None, not_work=False, works=False):
-        c = [t for t in ((self.namu_works if works else self.namu).get(pname(ja or '')) or []) if '/' not in t
+        # 「ブレス」처럼 짧은 제목은 넓은 색인(문서 앞부분 아무 괄호)으로 찾으면 엉뚱한 문서가 걸려서, 첫머리 제목 괄호만 쓰는 엄격한 색인으로 찾음
+        short = len(re.sub(r'[\s・･]', '', unicodedata.normalize('NFKC', ja or ''))) <= 4
+        c = [t for t in ((self.namu_works if works and not short else self.namu).get(pname(ja or '')) or []) if '/' not in t
              and not re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', t)]   # 예전 색인에 든 하위·목록 문서 제목은 버림
         if works:
             c = [t for t in c if t not in self.list_docs]
