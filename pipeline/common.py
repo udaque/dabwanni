@@ -30,6 +30,7 @@ def load_catalog():
     for r in d['rows']:
         w = dict(zip(F, r))
         w['_stu_names'] = [ST[i][0] if isinstance(ST[i], list) else ST[i] for i in w.get('stu') or []]
+        w['_stu_names'] += [ST[i][1] for i in w.get('stu') or [] if isinstance(ST[i], list) and len(ST[i]) > 1 and ST[i][1]]   # 한국어 제작사 이름도 (라프텔 「와오월드」 같은 표기와 맞추려고)
         out.append(w)
     return out
 

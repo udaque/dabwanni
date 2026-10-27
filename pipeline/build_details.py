@@ -190,6 +190,27 @@ def laftel_match(w, idx):
     order = {'자막': 0, '더빙': 1, '무삭제': 2}
     return [(kind, next(iter(ids))) for kind, ids in sorted(by.items(), key=lambda x: order[x[0]]) if len(ids) == 1]
 
+def _nstu(s): return re.sub(r'[^0-9a-z가-힣ぁ-んァ-ン一-龥]', '', unicodedata.normalize('NFKC', s or '').lower())
+def laftel_by_studio(w, idx, BYQ):
+    """한국어 제목이 없는 작품: 같은 분기에 같은 제작사의 라프텔 작품이 딱 한 묶음이고, 다봤니 쪽에도 그 분기·제작사 TV·웹 작품이 하나뿐일 때만 짝지음.
+    라프텔 API에는 일본어 원제가 없어서 제목 대신 제작사로 맞춤. 돌려주는 것: (라프텔 한국어 제목, [(판, 번호)])"""
+    if not idx or not w.get('y') or not w.get('q') or w.get('ty') not in ('T', 'O'): return None
+    mine = {_nstu(s) for s in w.get('_stu_names') or [] if _nstu(s)}
+    if not mine: return None
+    if len([x for x in BYQ.get((w['y'], w['q']), []) if x.get('ty') in ('T', 'O') and mine & {_nstu(s) for s in x.get('_stu_names') or []}]) != 1: return None
+    series = {}
+    for t, it in idx.get((w['y'], w['q']), []):
+        if mine & {_nstu(s) for s in it.get('studios') or []} and it.get('medium') in (None, 'TVA', 'TV', 'ONA', '웹'):
+            series.setdefault(it.get('series_id') or it['id'], []).append(it)
+    if len(series) != 1: return None
+    its = next(iter(series.values()))
+    base = next((it for it in its if laftel_kind(it) == '자막'), its[0])
+    name = re.sub(r'^\s*\((자막|더빙|무삭제)\)\s*', '', base.get('name') or '').strip()
+    by = {}
+    for it in its: by.setdefault(laftel_kind(it), []).append(it['id'])
+    order = {'자막': 0, '더빙': 1, '무삭제': 2}
+    return name, [(k, v[0]) for k, v in sorted(by.items(), key=lambda x: order[x[0]]) if len(v) == 1]
+
 VOD = {'danime': 'dアニメストア', 'unext': 'U-NEXT', 'abema': 'ABEMA', 'netflix': 'Netflix', 'prime': 'Prime Video', 'nicovideo': 'ニコニコ',
        'disneyplus': 'Disney+', 'youtube': 'YouTube', 'crunchyroll': 'Crunchyroll'}
 from names_ko import STATION_KO
@@ -253,6 +274,8 @@ def main():
     def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'en', 'auto') if k in n}}
 
     LAF = laftel_index()
+    BYQ = collections.defaultdict(list)
+    for _w in W: BYQ[(_w.get('y'), _w.get('q'))].append(_w)
     made, nonjp, details = 0, {}, {}
     errors = []
     def one(w):
@@ -288,7 +311,9 @@ def main():
             g = lambda s: {s[i:i + 2] for i in range(len(s) - 1)}
             return any(g(re.sub(r'\s', '', t)) & g(re.sub(r'\s', '', r)) for r in _rel_ko)
         ko = None
-        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+        _lfs = laftel_by_studio(w, LAF, BYQ) if not w.get('ko') else None
+        w['_lfs'] = _lfs
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
         if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko
@@ -494,7 +519,7 @@ def main():
                 if key in seen: continue
                 seen.add(key); out.append({**p, 'name': n})
             ott[c] = out
-        lf = laftel_match(w, LAF)
+        lf = laftel_match(w, LAF) or ((w.get('_lfs') or (None, []))[1])      # 제목으로 못 찾으면 제작사로 짝지은 것
         if lf:
             kr = [p for p in ott.get('KR', []) if 'laftel' not in str(p.get('name')).lower() and '라프텔' not in str(p.get('name'))]
             many = len(lf) > 1          # 판이 하나뿐이면 그냥 「라프텔」, 여럿이면 「라프텔 (자막)」·「라프텔 (더빙)」

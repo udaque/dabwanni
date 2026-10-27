@@ -284,10 +284,17 @@ def _sim(a, b):
     if len(ra) >= 6 and len(rb) >= 6: s = max(s, difflib.SequenceMatcher(None, ra, rb).ratio())
     return s
 def _marks(r): return {m.lower() for m in PART_MARK.findall(unicodedata.normalize('NFKC', ' '.join(x for x in (r['ja'], r['r'], r.get('en')) if x)))}
+def sc_of(r):
+    """제목 속 시즌·쿨 번호 (「2」·「第2クール」·「Part 2」·「2nd Season」 모두 2). 없으면 1"""
+    t = unicodedata.normalize('NFKC', ' '.join(x for x in (r['ja'], r['r']) if x))
+    m = re.search(r'(?:第\s*(\d+)\s*(?:期|クール|シーズン|部)|(\d+)(?:st|nd|rd|th)\s*(?:season|cour)|(?:season|part|cour)\s*(\d+)|\s(\d)\s*$)', t, re.I)
+    return int(next(g for g in m.groups() if g)) if m else 1
 fz_blocks = collections.defaultdict(set)
 for i, r in enumerate(out):
     if not r['y']: continue
-    j, ro_ = _nj2(r['ja']), nro(r['r'])
+    j, ro_ = _nj2(season_base(r['ja']) or r['ja']), nro(r['r'])
+    q_in = re.search(r'[「『]([^」』]{4,})[」』]', unicodedata.normalize('NFKC', r['ja'] or ''))   # 「Animatica「北斗の拳 …」第2クール」 같은 상표 감싸기
+    if q_in and len(_nj2(q_in.group(1))) >= 4: fz_blocks[(r['y'], 'j', _nj2(q_in.group(1))[:3])].add(i)
     if len(j) >= 4: fz_blocks[(r['y'], 'j', j[:3])].add(i)
     if len(ro_) >= 6: fz_blocks[(r['y'], 'r', ro_[:4])].add(i)
 n_fz = 0
@@ -298,7 +305,10 @@ for key, idx in fz_blocks.items():
         for y_ in range(x_ + 1, len(idx)):
             a, b = out[idx[x_]], out[idx[y_]]
             if find(idx[x_]) == find(idx[y_]): continue
-            if (a['al'] or a['mal']) and (b['al'] or b['mal']): continue      # 둘 다 번호 있으면 원천이 다른 작품으로 본 것
+            weak_a, weak_b = not (a['al'] or a['mal']), not (b['al'] or b['mal'])
+            # 한쪽은 AniList 번호만, 다른 쪽은 MAL 번호만 있는 짝은 원천 목록이 서로 못 이은 같은 작품일 수 있어 보조 항목처럼 비교
+            cross = (a['al'] and not a['mal'] and b['mal'] and not b['al']) or (b['al'] and not b['mal'] and a['mal'] and not a['al'])
+            if not (weak_a or weak_b or cross): continue      # 같은 번호 체계로 따로 둔 작품은 다른 작품으로 봄
             if a.get('_mv') != b.get('_mv') and (a['al'] or a['mal']) == (b['al'] or b['mal']): continue   # 한쪽이 보조 항목이면 그쪽 형식 표시는 믿지 않음
             if {a['ty'], b['ty']} & {'T'} and {a['ty'], b['ty']} & {'M'}: continue   # TV 시리즈와 극장판 총집편은 다른 작품
             if a['q'] and b['q'] and abs(a['q'] - b['q']) > 1: continue
@@ -307,7 +317,20 @@ for key, idx in fz_blocks.items():
             # 「~Prelude~」와 「~Interlude~」처럼 끝이 다른 별개 편을 막으려고: 아주 비슷하거나(0.95), 괄호 덧붙임만 다를 때
             br = lambda t: bool(re.search(r'[\(（\[【]', t or ''))
             same_bare = nbare(a['ja']) and nbare(a['ja']) == nbare(b['ja']) and not (br(a['ja']) and br(b['ja']))   # 둘 다 괄호가 있으면 다른 판(UG 파트·SATORU 파트)
-            if _sim(a, b) >= 0.95 or same_bare: union(idx[x_], idx[y_]); n_fz += 1
+            # 시즌 표시를 뺀 제목끼리도 비교 (「…挽歌 2」 = 「…挽歌 Part 2」), 보조 항목은 앞뒤 상표(「Animatica「…」第2クール」)를 감싼 경우도
+            def inner(r):
+                # 「Animatica「北斗の拳 …」第2クール」처럼 따옴표 바깥이 영문 상표·시즌 표시뿐일 때만 안쪽 제목을 씀
+                # (「「外科医エリーゼ」放送後ミニドラマ」처럼 바깥에 일본어 설명이 붙으면 다른 영상)
+                t = unicodedata.normalize('NFKC', r['ja'] or ''); m = re.search(r'[「『]([^」』]{4,})[」』]', t)
+                if not m: return None
+                rest = SEASON_MARK.sub('', (t[:m.start()] + ' ' + t[m.end():]).strip())
+                return _nj2(m.group(1)) if re.fullmatch(r'[A-Za-z0-9 .\-]*', rest.strip()) else None
+            sa, sb = _nj2(season_base(a['ja']) or a['ja']), _nj2(season_base(b['ja']) or b['ja'])
+            if weak_a and inner(a) and inner(a) == sb: sa = sb
+            if weak_b and inner(b) and inner(b) == sa: sb = sa
+            same_season = bool(sa) and sa == sb and (a.get('_sc') or sc_of(a)) == (b.get('_sc') or sc_of(b))
+            if cross and not (same_season or _sim(a, b) >= 0.97): continue
+            if _sim(a, b) >= 0.95 or same_bare or same_season: union(idx[x_], idx[y_]); n_fz += 1
 print('비슷한 제목 보조 항목 합침', n_fz)
 
 groups = collections.defaultdict(list)

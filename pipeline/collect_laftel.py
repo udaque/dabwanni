@@ -5,6 +5,7 @@ import argparse, datetime
 from common import *
 
 API = 'https://laftel.net/api/search/v1/discover/?sorting=latest&years='
+DETAIL = 'https://laftel.net/api/items/v4/{}/'
 HEAD = {'laftel': 'TeJava', 'Accept': 'application/json'}   # 라프텔 API가 요구하는 머리글 (알려진 사용 예와 같은 값)
 
 def quarter_label(y, q): return f'{y}년 {q}분기'
@@ -22,6 +23,7 @@ if __name__ == '__main__':
         for q in range(4, 0, -1):
             if (y, q) > (cy + (cq == 4), (cq % 4) + 1): continue        # 다음 분기까지만
             items.append({'k': f'{y}-{q}', 'y': y, 'q': q})
+    blocked = [False]
     def work(x, run):
         http.run = run
         age = fetched_at('laftel', x['k'])
@@ -35,6 +37,20 @@ if __name__ == '__main__':
                 res.append({k: r.get(k) for k in ('id', 'name', 'img', 'medium', 'genres', 'is_dubbed', 'is_uncensored', 'is_laftel_only',
                                                   'is_avod', 'is_viewing', 'is_expired', 'is_adult') if k in r})
             url = d.get('next')
+        # 최근 2년·다음 분기는 작품별 상세(제작사·감독·묶음 번호)도 받음: 한국어 제목이 없는 다봤니 작품과 「같은 분기·같은 제작사」로 짝짓는 데 씀
+        if (cy * 4 + cq) - (x['y'] * 4 + x['q']) <= 8:
+            for it in res:
+                old = load('laftel_item', str(it['id']))
+                at = fetched_at('laftel_item', str(it['id']))
+                if (not old or not at or (now - at.date()).days >= 30) and not blocked[0]:
+                    try: d = http.json(DETAIL.format(it['id']), headers=HEAD) or {}
+                    except (Blocked, NotFound) as e:      # 해외 접속 차단 등: 상세는 다음 실행으로 미루고 목록은 그대로 저장
+                        blocked[0] = True; run.say(f'라프텔 상세 받기 중단: {type(e).__name__}'); continue
+                    old = {'studios': [p.get('name') for p in d.get('production_companies') or [] if p.get('name')],
+                           'directors': [p.get('name') for p in d.get('directors') or [] if p.get('name')],
+                           'series_id': d.get('series_id'), 'air_year_quarter': d.get('air_year_quarter')}
+                    save('laftel_item', str(it['id']), old)
+                if old: it.update({k: old.get(k) for k in ('studios', 'directors', 'series_id')})
         save('laftel', x['k'], {'quarter': quarter_label(x['y'], x['q']), 'items': res}); return res
     run_source('laftel', items, work, canary=(lambda: page(API + urllib.parse.quote(quarter_label(cy - 1, 4)))['count'] > 0, '작년 4분기 목록'),
                budget_min=a.budget_min, max_empty=None)
