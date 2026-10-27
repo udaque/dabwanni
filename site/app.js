@@ -55,7 +55,7 @@ function bareTitle(s, w){
   if (w.sm) {
     SEASON_RE.forEach(re => x = x.replace(re, ''));
     const sn = (w.sm.match(/s(\d+)/) || [])[1];
-    if (sn) x = x.replace(new RegExp('\\s+' + sn + '$'), '');      // 「薬屋のひとりごと 3」처럼 끝에 시즌 번호만 붙은 경우
+    if (sn) x = x.replace(new RegExp('(\\s+|(?<=[가-힣]))' + sn + '$'), '');      // 「薬屋のひとりごと 3」, 「…합니다2」처럼 끝에 시즌 번호만 붙은 경우
   }
   return x.replace(/\s*[\(（]\s*[\)）]/g, '').trim() || s;
 }

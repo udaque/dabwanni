@@ -141,6 +141,7 @@ for x in a:
 import unicodedata
 def nja(t):
     t = unicodedata.normalize('NFKC', t or '')
+    t = re.sub(r'[\(（]\s*(19|20)\d\d\s*[\)）]', '', t)          # 「タヌキとキツネ (2026)」의 연도 꼬리는 비교에서 뺌
     t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
     t = re.sub(r'^\s*(OVA|OAD|ONA|劇場版OVA)\s+', '', t)               # 「OVA ケガレボシ」 = 「ケガレボシ」
     return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)

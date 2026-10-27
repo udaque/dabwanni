@@ -73,6 +73,7 @@ class Names:
         if auto: n['auto'] = 1
         return n
     def character(self, native, full=None, first=None, last=None, work_titles=()):
+        native = re.sub(r'\s*[＝=]\s*', '・', native) if native else native      # 「アリヒト＝アトベ」의 ＝는 이름 사이 구분
         ko = self.namu_one(native, list(work_titles)) if native else None
         if ko: return {k: v for k, v in {'ko': ko, 'ja': native, 'en': full}.items() if v}
         if native and re.fullmatch(r'[\u3040-\u30ff・ー\s]+', native): k = kana_to_hangul(native)
@@ -274,7 +275,21 @@ def main():
             tm_eps = [e for e in tm_eps if not e.get('air') or e['air'] >= start]
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
-        ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'), works=True)
+        # AniList 일본어 제목이 작품 목록 제목을 늘린 것이면(「薬屋のひとりごと」→「薬屋のひとりごと 亡妃の秘宝」) 그쪽을 씀
+        _nat = unicodedata.normalize('NFKC', ((al or {}).get('title') or {}).get('native') or '')
+        if _nat and w.get('ja') and _nat != w['ja'] and _nat.startswith(unicodedata.normalize('NFKC', w['ja'])) and len(_nat) > len(w['ja']) + 1: w['ja'] = _nat
+        def _digits_ok(t):
+            dj, dk = set(re.findall(r'\d+', unicodedata.normalize('NFKC', re.sub(r'[\(（](19|20)\d\d[\)）]', '', w.get('ja') or '')))), set(re.findall(r'\d+', t or ''))
+            return not (dj and dk) or bool(dj & dk)                       # 「第5話」에 「제3화」 같은 다른 편 제목이 붙지 않게
+        _rel_ko = [BY[r_]['ko'] for r_ in ['a' + str(e['node']['id']) for e in ((al or {}).get('relations') or {}).get('edges', [])] if r_ in BY and BY[r_].get('ko')]
+        def _related_ok(t):
+            # 나무위키·Wikidata 제목은 관련 작품 한국어 제목과 두 글자 이상 겹쳐야 씀 (약사의 혼잣말 극장판에 「히어로 문고」가 붙던 문제)
+            if not _rel_ko: return True
+            g = lambda s: {s[i:i + 2] for i in range(len(s) - 1)}
+            return any(g(re.sub(r'\s', '', t)) & g(re.sub(r'\s', '', r)) for r in _rel_ko)
+        ko = None
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = _t; break
         if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
@@ -556,6 +571,7 @@ def main():
         if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
         r[yi], r[qi] = w.get('y'), w.get('q')
+        if w.get('ja'): r[c['fields'].index('ja')] = w['ja']
     for s in c['studios']:
         if s[3] in studios and not studios[s[3]]['name'].get('auto'): s[1], s[2] = studios[s[3]]['name']['ko'], False
     json.dump(c, open(cp, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
