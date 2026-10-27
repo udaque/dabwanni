@@ -127,6 +127,7 @@ import hashlib
 def studio_sid(name): return 's' + hashlib.sha1(studio_key(name).encode()).hexdigest()[:10]
 
 ROLE_KO = {  # 일본어·영어 직책 → 한국어
+ 'Assistant Episode Director': '연출 보좌', 'Assistant Director': '조감독', 'Assistant Producer': '보조 프로듀서',
  'Sub Character Design': '서브 캐릭터 디자인', 'Design Assistance': '디자인 보조', 'Character Design Assistance': '캐릭터 디자인 보조',
  'Monster Design': '몬스터 디자인', 'Creature Design': '크리처 디자인', 'Costume Design': '의상 디자인', 'Weapon Design': '무기 디자인',
  'Concept Art': '콘셉트 아트', 'Concept Design': '콘셉트 디자인', 'Title Logo Design': '타이틀 로고 디자인', 'Assistant Animation Director': '작화감독 보좌',

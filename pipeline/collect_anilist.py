@@ -43,7 +43,7 @@ if __name__ == '__main__':
     def work(w, run):
         http.run = run
         old = load('anilist', w['k'])
-        if old is not None and (old or {}).get('_qv') == QV and not needs('anilist', w): return SKIP
+        if old is not None and (old or {}).get('_qv') == QV and not needs('anilist', w, airing_days=3): return SKIP
         r = fetch(http, w['al']) or {}
         if r: r['_qv'] = QV
         save('anilist', w['k'], r); return r

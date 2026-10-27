@@ -52,6 +52,7 @@ class Names:
         if native and re.search(r'[\uac00-\ud7a3]', native): return {'ko': native, 'ja': native}
         ko = self.namu_one(native, ['성우', '작곡', '작사', '가수', '애니메이터', '감독', '각본', '일러스트'], not_work=True) if native else None
         if not ko and native and pname(native) in self.wd_people: ko = self.wd_people[pname(native)]['ko']
+        if ko and not re.search(r'[\uac00-\ud7a3]', ko): ko = None      # 한국어 이름 칸에 한자만 든 경우(「咲」)는 버리고 자동 표기로
         auto = not ko
         if not ko: ko, _ = person_ko(native, first, last)
         n = {'ko': ko, 'ja': native}
@@ -315,6 +316,7 @@ def main():
             c = byname.get(pname(sc['char']))
             if not c:
                 c = {'name': NM.character(sc['char'], work_titles=work_names), 'role': None, 'cast': []}; chars.append(c); byname[pname(sc['char'])] = c
+            if any(v['lang'] == 'ja' for v in c['cast']): continue      # AniList에 일본어 성우가 있으면 그쪽을 믿고 쇼보이 이름은 덧붙이지 않음
             i = P(sc['name'])
             if not any(v['pid'] == i for v in c['cast']): c['cast'].append({**ref(i), 'lang': 'ja'})
         for c in chars:

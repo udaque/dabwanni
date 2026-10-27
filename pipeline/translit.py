@@ -89,6 +89,13 @@ def name_to_hangul(native=None, first=None, last=None):
             return (kana_to_hangul(kana[:cut]) + ' ' + kana_to_hangul(kana[cut:])).strip(), 'checked'
         if not (first or last):
             return kana_to_hangul(kana), 'guess'
+        # 한자 성 + 가타카나 이름(「日野トミー」): 로마자가 영어식(Tommy)이라 맞춰 볼 수 없으니, 가나 부분은 그대로 읽음
+        m = re.fullmatch(r'([\u4e00-\u9fff々]+)\s*([\u30a0-\u30ffー・]+)', native.strip())
+        if m:
+            sur = ''.join(k for _, k, _ in reading(m.group(1)))
+            return (kana_to_hangul(sur) + ' ' + kana_to_hangul(m.group(2))).strip(), 'guess'
+        if re.search(r'[\u3040-\u30ff]', native):      # 가나가 섞인 이름은 로마자보다 원어 읽기를 믿음
+            return kana_to_hangul(kana), 'guess'
     from_rom = ' '.join(x for x in (romaji_to_hangul(last), romaji_to_hangul(first)) if x)
     return from_rom, 'guess'
 
