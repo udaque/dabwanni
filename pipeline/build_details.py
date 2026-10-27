@@ -29,6 +29,17 @@ def add_season_code(ko, code):
     s, c, p = m.groups()
     return ' '.join([ko] + ([f'{s}기'] if s else []) + ([f'{c}쿨'] if c else []) + ([f'{p}부'] if p else []))
 
+def tmdb_title_ok(w, tm):
+    """TMDB 한국어 제목. TMDB는 한 시리즈를 한 작품으로 묶고 시즌으로 나누는 경우가 많아(「바케모노가타리」 안에 「오프&몬스터 시즌」이 6시즌으로 들어 있음),
+    2시즌 이후로 이어 붙인 작품은 TMDB 원제가 이 작품 원제와 이어질 때만 TMDB 한국어 제목을 씀."""
+    import difflib
+    t = (tm or {}).get('titles') or {}
+    ko, tj = t.get('ko'), t.get('ja')
+    if not ko or not w.get('tms') or int(w.get('tms') or 1) <= 1 or not tj or not w.get('ja'): return ko
+    n = lambda s: re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？]', '', unicodedata.normalize('NFKC', s)).lower()
+    a_, b_ = n(tj), n(w['ja'])
+    return ko if a_ and (a_ in b_ or b_ in a_ or difflib.SequenceMatcher(None, a_, b_).ratio() >= 0.6) else None
+
 def clean_ko(ko):
     """「Gwihwanjaui … 2 (귀환자의 마법은 특별해야 합니다2)」처럼 로마자 표기 뒤 괄호에 한글 제목이 든 경우 괄호 안 한글만 씀"""
     m = re.fullmatch(r'\s*([^()가-힣]+?)\s*[\(（]([^()（）]*[가-힣][^()（）]*)[\)）]\s*', ko or '')
@@ -286,6 +297,8 @@ def main():
     try: _al = json.load(open(os.path.join(SITE, 'data', 'catalog.json'), encoding='utf-8')).get('aliases') or {}   # 작품 목록에 함께 실린 연결표
     except Exception: _al = {}
     for _o, _n in _al.items(): OLD[_n].append(_o)
+    try: OVR = {k_: v for k_, v in json.load(open(os.path.join(ROOT, 'overrides.json'), encoding='utf-8')).items() if not k_.startswith('_')}
+    except FileNotFoundError: OVR = {}
     LAF = laftel_index()
     BYQ = collections.defaultdict(list)
     for _w in W: BYQ[(_w.get('y'), _w.get('q'))].append(_w)
@@ -336,9 +349,10 @@ def main():
         ko = None
         _lfs = laftel_by_studio(w, LAF, BYQ) if not w.get('ko') else None
         w['_lfs'] = _lfs
-        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('kowiki', (ld('kowiki') or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('kowiki', (ld('kowiki') or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
+        if (OVR.get(k) or {}).get('ko'): ko = OVR[k]['ko']                  # 직접 정한 값이 가장 우선 (overrides.json)
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):

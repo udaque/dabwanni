@@ -18,11 +18,11 @@ if __name__ == '__main__':
         if not isinstance(d, dict) or 'query' not in d and 'error' not in d: raise SchemaError('위키백과 응답 형식이 바뀜')
         return d.get('query') or {}
     cy = datetime.date.today().year
+    from build_details import tmdb_title_ok
     def has_ko(w):
         if w.get('ko'): return True
-        t = (load('tmdb', w['k']) or {}).get('titles') or {}
-        return bool(t.get('ko'))
-    W = [w for w in load_catalog() if w.get('ja') and (w.get('y') or 0) >= cy - 3 and w.get('ty') in ('T', 'O', 'M', 'V')]
+        return bool(tmdb_title_ok(w, load('tmdb', w['k'])))     # TMDB 시리즈 이름만 붙은 작품(이야기 시리즈 등)도 찾아봄
+    W = [w for w in load_catalog() if w.get('ja') and w.get('ty') in ('T', 'O', 'M', 'V') and ((w.get('y') or 0) >= cy - 3 or int(w.get('tms') or 0) >= 2)]
     W.sort(key=lambda w: (-(w.get('y') or 0), -(w.get('q') or 0)))
     def work(w, run):
         http.run = run
