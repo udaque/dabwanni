@@ -48,7 +48,7 @@ const SEASON_RE = [
   /(?<=[\s\u3040-\u30ff\u4e00-\u9fff、・:])\s*(?:II|III|IV|V|VI|Ⅱ|Ⅲ|Ⅳ|Ⅴ|Ⅵ)$/g, /\s+(?:II|III|IV|V|VI)$/g,
   /\s*\d+\s*기(?=\s|$)/g, /\s*시즌\s*\d+/g, /\s*\d+\s*쿨(?=\s|$)/g, /\s*파트\s*\d+/g, /\s*\d+\s*부(?=\s|$)/g, /\s*파이널(?=\s|$)/g];
 // 발표 전 임시 표기((Sequel)·(続編)·(新アニメ化プロジェクト) 등)는 늘 빼고, 시즌 표시는 꼬리표가 있을 때만 뺌
-const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-ka Project|TBA|Working Title|続編|新作|新シリーズ|仮|仮題|仮称|新アニメ化プロジェクト|新アニメ|アニメ化決定)\s*[\)）]/gi;
+const PLACEHOLDER = /\s*[\(（]\s*(Sequel|Zokuhen|New Anime Project|Shin Anime-ka Project|TBA|Working Title|TV|続編|新作|新シリーズ|仮|仮題|仮称|新アニメ化プロジェクト|新アニメ|アニメ化決定)\s*[\)）]/gi;
 function bareTitle(s, w){
   if (!s) return s;
   let x = s.replace(PLACEHOLDER, '').replace(/\s*[\(（](19|20)\d\d[\)）]/g, '');      // 「薬屋のひとりごと (2025)」처럼 붙은 연도도 뺌

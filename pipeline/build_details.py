@@ -23,6 +23,7 @@ def strip_disambig(t): return re.sub(r'\s*\([^)]*\)\s*$', '', t or '').strip()
 class Names:
     def __init__(self):
         self.namu = load('namu', 'index') or {}
+        self.namu_works = load('namu', 'index_works') or self.namu      # 작품 제목용 넓은 색인 (없으면 엄격한 색인)
         self.work_titles = set()      # 작품 한국어 제목 (main에서 채움)
         self.korea = load('namu', 'korea') or {}
         wp = load('wikidata', 'people') or []
@@ -33,8 +34,8 @@ class Names:
             for k in (r.get('ja'), r.get('en')):
                 if k: self.wd_studio.setdefault(pname(k).lower(), r)
         self.wd_works = {r['mal']: r for r in load('wikidata', 'works') or []}
-    def namu_one(self, ja, prefer=None, not_work=False):
-        c = [t for t in (self.namu.get(pname(ja or '')) or []) if '/' not in t
+    def namu_one(self, ja, prefer=None, not_work=False, works=False):
+        c = [t for t in ((self.namu_works if works else self.namu).get(pname(ja or '')) or []) if '/' not in t
              and not re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', t)]   # 예전 색인에 든 하위·목록 문서 제목은 버림
         if not_work:      # 인물·회사 이름을 찾을 때는 작품 문서 제목(예: 「5등분의 신부」)을 버림
             c = [t for t in c if nko(strip_disambig(t)) not in self.work_titles and not re.search(r'\d', t)]
@@ -261,7 +262,7 @@ def main():
             tm_eps = [e for e in tm_eps if not e.get('air') or e['air'] >= start]
         wdw = NM.wd_works.get(str(w['mal'])) if w['mal'] else None
         # 제목 (한국어: AniDB → TMDB → Wikidata → 나무위키)
-        ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'))
+        ko = w.get('ko') or ((tm or {}).get('titles') or {}).get('ko') or (wdw or {}).get('ko') or NM.namu_one(w.get('ja'), works=True)
         if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)

@@ -9,6 +9,7 @@ JA = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
 # 문서 주제의 원어 이름만: 첫머리의 굵은 제목 바로 뒤 괄호 (예: '''유키 아오이'''(悠木碧, ...))
 # 예전엔 앞부분의 괄호를 모두 넣어서, 작품 문서에 나오는 제작진 이름까지 그 작품 문서와 이어졌음 (荻野美希 → 「5등분의 신부」)
 PAREN = re.compile(r"'''[^'\n]{1,80}'''\s*[（(]([^()（）\n]{1,60})[)）]")
+ANY_PAREN = re.compile(r'[（(]([^()（）\n]{1,60})[)）]')     # 작품 제목용 넓은 색인: 앞부분의 괄호 모두 (예전 방식)
 def lead_names(head):
     """문서 첫머리의 굵은 제목 바로 뒤 괄호 안 원어 이름들. 괄호 안의 읽기 괄호(「悠木(ゆうき) 碧(あおい)」)와
     「일본어: 」 같은 한국어 머리말, 위키 문법을 걷어 냄. 예전엔 괄호가 겹치면 통째로 놓쳐서 색인이 크게 줄었음."""
@@ -87,7 +88,7 @@ if __name__ == '__main__':
             path = download_dump()
         except Exception as e:
             run._record_fail('덤프 받기', e); run.fail_source(f'덤프를 받지 못함: {type(e).__name__}: {e}'); run.finish(); sys.exit(2)
-    index, kr = {}, {}
+    index, works, kr = {}, {}, {}      # index: 인물·회사·캐릭터용(엄격), works: 작품 제목용(넓게)
     try:
         for n, (title, text) in enumerate(rows(path)):
             if n % 100000 == 0: run.say(f'문서 {n}')
@@ -103,10 +104,21 @@ if __name__ == '__main__':
             for c in cands:
                 L = index.setdefault(pname(c), [])
                 if title not in L and len(L) < 8: L.append(title)
+            # 작품 제목은 문서 첫머리에 굵은 제목 없이 「개요」부터 시작하는 문서가 많아, 예전처럼 앞부분 괄호를 모두 씀.
+            # (엄격한 색인만 쓰자 「タヌキとキツネ」 같은 작품의 한국어 제목이 사라졌음)
+            wc = set(cands)
+            for m in ANY_PAREN.finditer(head):
+                for part in re.split(r'[/,、;·]', m.group(1)):
+                    part = re.sub(r'^\s*[가-힣\s]+[:：]\s*', '', part).strip()
+                    if JA.search(part) and not re.search(r'[\uac00-\ud7a3]', part): wc.add(part)
+            for c in wc:
+                L = works.setdefault(pname(c), [])
+                if title not in L and len(L) < 8: L.append(title)
             m = KR_SEC.search(text)
             if m: kr[title] = plain(m.group(1))[:600]
         if len(index) < 10000: raise SchemaError(f'색인이 {len(index)}개뿐: 덤프 형식이 다를 가능성 (열 이름 title, text 필요)')
-        save('namu', 'index', index); save('namu', 'korea', kr)
+        if len(works) < 50000: raise SchemaError(f'작품 색인이 {len(works)}개뿐: 덤프 형식이 다를 가능성')
+        save('namu', 'index', index); save('namu', 'index_works', works); save('namu', 'korea', kr)
         run.c['ok'] = len(index); run.say(f'색인 {len(index)}, 한국 방영 문단 {len(kr)}')
     except Exception as e:
         run._record_fail('덤프', e); run.fail_source(f'{type(e).__name__}: {e}')
