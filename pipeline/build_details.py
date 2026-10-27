@@ -273,6 +273,10 @@ def main():
         return sid
     def sref(sid): n = studios[sid]['name']; return {'sid': sid, **{k: n[k] for k in ('ko', 'ja', 'en', 'auto') if k in n}}
 
+    OLD = collections.defaultdict(list)          # 새 대표 번호 → 합쳐진 옛 번호들
+    try: _al = json.load(open(os.path.join(SITE, 'data', 'catalog.json'), encoding='utf-8')).get('aliases') or {}   # 작품 목록에 함께 실린 연결표
+    except Exception: _al = {}
+    for _o, _n in _al.items(): OLD[_n].append(_o)
     LAF = laftel_index()
     BYQ = collections.defaultdict(list)
     for _w in W: BYQ[(_w.get('y'), _w.get('q'))].append(_w)
@@ -281,7 +285,15 @@ def main():
     def one(w):
         nonlocal made
         k = w['k']
-        al, sy, at, tm, jw, mu, ab = (load(s, k) for s in ('anilist', 'syoboi', 'animethemes', 'tmdb', 'jawiki', 'music', 'anitabi'))
+        def ld(s, k=k):
+            # 중복을 합친 직후에는 새 대표 번호로 받은 원본이 아직 없을 수 있어, 합쳐진 옛 번호로 받아 둔 원본도 씀
+            # (예: MAL 번호로만 있던 「북두의 권 … Part 2」의 TMDB 한국어 제목)
+            v = load(s, k)
+            for o in ([] if v else OLD.get(k, [])):
+                v = load(s, o)
+                if v: break
+            return v
+        al, sy, at, tm, jw, mu, ab = (ld(s) for s in ('anilist', 'syoboi', 'animethemes', 'tmdb', 'jawiki', 'music', 'anitabi'))
         _t = (al or {}).get('title') or {}
         w['_alt'] = ' '.join(x for x in (_t.get('romaji'), _t.get('english')) if x)      # 시즌 꼬리표 판별용 (예: Kusuriya no Hitorigoto 2nd Season)
         w['_pre'] = any(e.get('relationType') == 'PREQUEL' for e in ((al or {}).get('relations') or {}).get('edges', []))   # 이전 시즌이 있는지 (로마 숫자 시즌 판별용)
@@ -315,7 +327,7 @@ def main():
         ko = None
         _lfs = laftel_by_studio(w, LAF, BYQ) if not w.get('ko') else None
         w['_lfs'] = _lfs
-        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('kowiki', (load('kowiki', k) or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('kowiki', (ld('kowiki') or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
         if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko

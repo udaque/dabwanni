@@ -363,7 +363,7 @@ for g in groups.values():
     rs = sorted((out[i] for i in g), key=rank, reverse=True)
     m = dict(rs[0])
     for o in rs[1:]:
-        for f in ('ja', 'ko', 'en', 'y', 'q', 'd', 'tmdb', 'tms', 'sy', 'an', 'bgm', 'site', 'vod'):
+        for f in ('ja', 'ko', 'en', 'y', 'q', 'd', 'tmdb', 'tms', 'sy', 'an', 'bgm', 'site', 'vod', 'al', 'mal', 'adb'):     # 번호도 채움 (합치기 보호 장치가 충돌을 이미 막음)
             if not m.get(f) and o.get(f): m[f] = o[f]
         if not m['p'] and o['p']: m['p'] = o['p']
         if (o.get('e') or 0) > (m.get('e') or 0): m['e'] = o['e']      # 방영 전 자리표시(1화)보다 큰 값이 실제에 가까움
