@@ -289,7 +289,7 @@ def main():
             return any(g(re.sub(r'\s', '', t)) & g(re.sub(r'\s', '', r)) for r in _rel_ko)
         ko = None
         for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
-            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = _t; break
+            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
         if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
