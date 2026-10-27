@@ -4,7 +4,7 @@
 - site/data/studios/<회사>.json  제작사 (+ index.json)
 - site/data/catalog.json         한국어 제목·제작사 한국어명을 보강해 다시 저장
 모든 사람·회사·캐릭터 이름에는 한국어 표기가 들어갑니다. 확인된 표기(나무위키·Wikidata·사전)가 없으면 음역하고 auto 표시를 붙입니다."""
-import os, re, json, shutil, glob, unicodedata
+import collections, os, re, json, shutil, glob, unicodedata
 from common import *
 from names_ko import add_season, add_arc, season_code, station_ko, JOB_KO, place_ko, date_ko, ja_company, studio_ko, person_ko, studio_sid, role_ko, role_eps, STAFF_ORDER, SOURCE_KO, GENRE_KO, TAG_KO
 from translit import kana_to_hangul, name_to_hangul
@@ -20,10 +20,18 @@ def bucket(s):
 
 def strip_disambig(t): return re.sub(r'\s*\([^)]*\)\s*$', '', t or '').strip()
 
+def clean_ko(ko):
+    """「Gwihwanjaui … 2 (귀환자의 마법은 특별해야 합니다2)」처럼 로마자 표기 뒤 괄호에 한글 제목이 든 경우 괄호 안 한글만 씀"""
+    m = re.fullmatch(r'\s*([^()가-힣]+?)\s*[\(（]([^()（）]*[가-힣][^()（）]*)[\)）]\s*', ko or '')
+    return m.group(2).strip() if m and re.search(r'[A-Za-z]{3}', m.group(1)) else ko
+
 class Names:
     def __init__(self):
         self.namu = load('namu', 'index') or {}
         self.namu_works = load('namu', 'index_works') or self.namu      # 작품 제목용 넓은 색인 (없으면 엄격한 색인)
+        # 넓은 색인에서 일본어 이름이 너무 많이 이어진 문서는 작품 문서가 아니라 목록·출판사 문서(예: 「히어로 문고」)로 봄
+        cnt = collections.Counter(t for v in self.namu_works.values() for t in v)
+        self.list_docs = {t for t, n in cnt.items() if n > 40}
         self.work_titles = set()      # 작품 한국어 제목 (main에서 채움)
         self.korea = load('namu', 'korea') or {}
         wp = load('wikidata', 'people') or []
@@ -37,6 +45,10 @@ class Names:
     def namu_one(self, ja, prefer=None, not_work=False, works=False):
         c = [t for t in ((self.namu_works if works else self.namu).get(pname(ja or '')) or []) if '/' not in t
              and not re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', t)]   # 예전 색인에 든 하위·목록 문서 제목은 버림
+        if works:
+            c = [t for t in c if t not in self.list_docs]
+            dj = set(re.findall(r'\d+', unicodedata.normalize('NFKC', ja or '')))
+            c = [t for t in c if not (dj and re.findall(r'\d+', t)) or set(re.findall(r'\d+', t)) == dj]   # 번호가 다르면 다른 편 (第5話 ≠ 제3화)
         if not_work:      # 인물·회사 이름을 찾을 때는 작품 문서 제목(예: 「5등분의 신부」)을 버림
             c = [t for t in c if nko(strip_disambig(t)) not in self.work_titles and not re.search(r'\d', t)]
             # 사람 이름처럼 생긴 문서만: 로마자가 섞였거나(「너스위치 코무기짱 R」) 네 낱말이 넘으면 작품·단체 문서로 봄
@@ -536,7 +548,11 @@ def main():
     print(f'이전 시즌 한국어 제목 이어받음 {n_inh}편')
     for r in c['rows']:
         w = BY[r[0]]
-        r[smi] = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))      # 제목 뒤 시즌·쿨 꼬리표용
+        sm_ = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))
+        if sm_ and w.get('ty') == 'M': sm_ = None                                   # 극장판의 「Part 5」·「第5話」는 시즌·쿨이 아니라 편 번호
+        elif sm_ and w.get('ty') not in ('T', 'O'): sm_ = re.sub(r'[bc]\d+', '', sm_) or None
+        r[smi] = sm_      # 제목 뒤 시즌·쿨 꼬리표용
+        if w.get('ko'): w['ko'] = clean_ko(w['ko'])
         if w.get('ko') and r[ki] != w['ko']: n_ko += 1 if not r[ki] else 0; r[ki] = w['ko']
         r[si], r[ei] = w.get('st'), w.get('e')
         r[yi], r[qi] = w.get('y'), w.get('q')

@@ -154,7 +154,8 @@ def nro(t):
     t = re.sub(r'(?:part|cour|cor)(\d)', r'pt\1', t)                         # 「Part 2」와 「Cour 2」는 같은 2쿨 (앞에서 ou→o로 바뀌어 cour는 cor가 됨)
     return t
 KANJI_NUM = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
-SEASON_MARK = re.compile(r'\s*(第\s*[0-9一二三四五六七八九十]+\s*(期|シーズン|クール|部)|[0-9]+\s*期|[0-9]+(st|nd|rd|th)\s*season|season\s*[0-9]+|part\s*([0-9]+|ii|iii|iv)|cour\s*[0-9]+)\s*$', re.I)
+SEASON_MARK = re.compile(r'\s*(第\s*[0-9一二三四五六七八九十]+\s*(期|シーズン|クール|部)|[0-9]+\s*期|[0-9]+(st|nd|rd|th)\s*season|season\s*[0-9]+|part\s*([0-9]+|ii|iii|iv)|cour\s*[0-9]+|(?<=\s)[2-9]|(?<=\s)(II|III|IV|V|VI)|(?<=[^\sA-Za-z])(II|III|IV|Ⅱ|Ⅲ|Ⅳ))\s*$', re.I)
+# 끝의 맨 번호(「転生したら剣でした 2」)와 로마 숫자도 시즌 표시로 봄 (2~9만: 「86」 같은 제목 숫자와 구분)
 def season_base(t):
     """제목 끝의 시즌 표시를 뺀 이름 (「地獄楽 第二期」→「地獄楽」, 「Jigokuraku 2nd Season」→「Jigokuraku」). 표시가 없으면 None."""
     t0 = unicodedata.normalize('NFKC', t or '').strip(); b = SEASON_MARK.sub('', t0).strip()
@@ -195,6 +196,10 @@ def keys(r):
     for jt, prim in [(r['ja'], True)] + [(y, False) for y in r.get('_syn', []) if CJK.search(y)] + [(y, False) for y in mains(r['ja'])]:
         j = nja(jt)
         if (CJK.search(j) and len(j) >= 2) or len(j) >= 4: add(('ja', j), prim)       # 일본어는 「猫と竜」처럼 짧은 제목도 구분력이 큼
+    # 앞뒤가 바뀐 제목(「戦車椅子-TANK CHAIR-」와 「TANK CHAIR-戦車椅子-」): 구분 기호로 나눈 조각을 정렬해 비교
+    for t, prim in ((r['ja'], True), (r['r'], True)):
+        parts = [nja(p) for p in re.split(r'[-‐―－~〜～:：]', unicodedata.normalize('NFKC', t or '')) if nja(p)]
+        if len(parts) >= 2: add(('ja', '|'.join(sorted(parts))), prim)
     for t, prim in [(r['r'], True), (r.get('en'), True)] + [(y, False) for y in r.get('_syn', []) if not CJK.search(y)] + [(y, False) for y in mains(r['r'])]:
         n = nro(t)
         if len(n) >= 6 or (prim and len(n) >= 4): add(('ro', n), prim)      # 대표 제목끼리는 「SANDA」처럼 짧아도 비교
