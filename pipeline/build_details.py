@@ -289,7 +289,9 @@ def main():
         # AniList 방영 시작일에 월까지 있으면 그걸로 분기를 맞춤 (아래 TMDB 회차 거르기도 이 분기를 씀)
         _sd = (al or {}).get('startDate') or {}
         if _sd.get('year') and _sd.get('month') and w.get('ty') != 'X':
-            w['y'], w['q'] = _sd['year'], (_sd['month'] - 1) // 3 + 1
+            # 분기는 방송 업계 관례대로 한 달 앞당겨 셈: 3·6·9·12월에 시작하면 다음 분기 작품 (9월 말 시작 → 가을 4분기, 12월 시작 → 다음 해 겨울)
+            _m = _sd['month'] % 12
+            w['y'], w['q'] = _sd['year'] + (1 if _sd['month'] == 12 else 0), _m // 3 + 1
         # TMDB 회차가 다른 시즌 것이면(예: 3기 작품에 1기 회차가 붙음) 이 작품 방영 시작보다 한참 앞선 회차는 버림
         tm_eps = (tm or {}).get('episodes', [])
         if tm_eps and w.get('y') and w.get('q') and any(e.get('air') for e in tm_eps):

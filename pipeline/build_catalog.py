@@ -67,7 +67,8 @@ def is_music_video(x):
     return 'vocaloid' in t or 'music' in t
 def from_anilist(m):
     sd=m.get('startDate') or {}
-    yr=sd.get('year') or m.get('seasonYear'); sea=SEAS_OF[(sd['month']-1)//3+1] if sd.get('month') else (m.get('season') or 'UNDEFINED')
+    yr=sd.get('year') or m.get('seasonYear'); sea=SEAS_OF[(sd['month'] % 12)//3+1] if sd.get('month') else (m.get('season') or 'UNDEFINED')
+    if sd.get('month') == 12 and yr: yr += 1          # 12월 시작은 다음 해 겨울 (3·6·9월 시작도 다음 분기로: 업계 관례)
     t=m.get('title') or {}
     syn=[x for x in [t.get('native'), t.get('english')] + (m.get('synonyms') or []) if x]
     return {'title': t.get('romaji') or t.get('english') or t.get('native') or '', 'type': FMT.get(m.get('format'),'UNKNOWN'),
