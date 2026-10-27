@@ -28,7 +28,7 @@ const store = {
 
 let W = [], BYK = new Map(), STUDIOS = [], TAGS = [], IDX = {people:null, studios:null}, usedAuto = false;
 const marks = store.get('marks', {});   // {k: {w,i,ep,rate,memo,re,start,end}}
-const S = { tab:'season', theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
+const S = { tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
 
 /* ---------- 데이터 ---------- */
 function fnv(s){ let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h % NB; }
@@ -167,6 +167,7 @@ function bind(){
   };
   $('#qClear').onclick = () => { clearTimeout(t); $('#q').value = ''; $('#qClear').hidden = true; S.q = ''; S.shown = PAGE; render(); $('#q').focus(); };
   $('#setLang').onclick = e => { const b = e.target.closest('[data-lang]'); if (!b) return; S.lang = b.dataset.lang; store.set('lang', S.lang); setLogo(); applyLang(); render(); };
+  $('#setEpHide').onclick = e => { const b = e.target.closest('[data-ephide]'); if (!b) return; S.epHide = b.dataset.ephide === '1'; store.set('epHide', S.epHide); render(); };
   $('#setTheme').onclick = e => { const b = e.target.closest('[data-theme-set]'); if (!b) return; S.theme = b.dataset.themeSet; store.set('theme', S.theme); applyTheme(); render(); };
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
   $('#qPick').onclick = () => openPicker();
@@ -210,7 +211,7 @@ function onClick(e){
       if (act === 'w' && m.w) { const tot = total(BYK.get(k)); if (tot) m.ep = tot; if (!m.start) m.start = today(); if (!m.end) m.end = today(); m.i = 1; }
       save(); refresh(k); return;
     }
-    if ((act === 'ep+' || act === 'ep-') && e.detail === 0) { setEp(k, (M(k).ep || 0) + (act === 'ep+' ? 1 : -1)); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
+    if ((act === 'ep+' || act === 'ep-') && e.detail === 0 && !e.pointerType) { setEp(k, (M(k).ep || 0) + (act === 'ep+' ? 1 : -1)); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
     if (act === 'whereOpen') { openWhere(el, k); return; }
     if (act === 'wherePick') { const m = M(k), v = el.dataset.v; m.where === v ? delete m.where : (m.where = v); save(); closeWhere(); refresh(k); return; }
     if (act === 'whereDel') { const v = el.dataset.v; store.set('whereCustom', whereCustom().filter(x => x !== v)); for (const kk in marks) if (marks[kk].where === v) delete marks[kk].where; save(); refresh(k); const menu = el.closest('.wmenu'); if (menu) menu.innerHTML = whereMenu(k); return; }
@@ -465,6 +466,7 @@ function refresh(k){
     const a = el.dataset.act;
     if (a === 'w' || a === 'i') el.classList.toggle('on', !!m[a]);
     if (a === 'epset') { const on = (m.ep || 0) >= +el.dataset.no; el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); }
+    if (el.dataset.tn) el.classList.toggle('spoil', S.epHide && +el.dataset.tn > (m.ep || 0));
     if (a === 'rate') el.classList.toggle('on', (m.rate || 0) >= +el.dataset.n);
     if (el.dataset.out === 'ep') el.innerHTML = progText(w);
     if (el.dataset.out === 're') el.textContent = F('times', m.re || 0);
@@ -502,6 +504,7 @@ function render(){
     $('#seasonBar').hidden = true;
     document.querySelectorAll('#setLang [data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === S.lang));
     document.querySelectorAll('#setTheme [data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === (S.theme || 'system')));
+    document.querySelectorAll('#setEpHide [data-ephide]').forEach(b => b.classList.toggle('on', (b.dataset.ephide === '1') === S.epHide));
     return;
   }
   const seasonMode = S.tab === 'season' && !S.q;
@@ -724,14 +727,15 @@ function epRow(w, e){
   const order = S.lang === 'ja' ? ['ja', 'en'] : S.lang === 'en' ? ['en', 'ja'] : ['ko', 'ja', 'en'];   // 일본어·영어 화면에는 한국어 회차 제목을 안 보임
   const tt = order.map(l => ti[l]).filter(Boolean);
   const lines = [];
-  if (tt.length > 1) lines.push(tt.slice(1).map(esc).join(' / '));
+  const hid = S.epHide && n && !seen, sp = (s) => `<span class="ttl ${hid ? 'spoil' : ''}" data-k="${esc(w.k)}" data-tn="${n || 0}">${s}</span>`;
+  if (tt.length > 1) lines.push(sp(tt.slice(1).map(esc).join(' / ')));
   const meta = [e.air, e.min && e.min + (S.lang === 'en' ? ' ' : '') + UL().m].filter(Boolean).join(' ');
   if (meta || e.special) lines.push(esc(meta) + (e.special ? ` <span class="pill">${t('2배 분량')}</span>` : ''));
   (e.staff || []).forEach(s => lines.push(`<b>${esc(t(s.role))}</b> ${s.people.map(pLink).join(', ')}`));
   if (e.studios?.length) lines.push(`<b>${t('협력')}</b> ${e.studios.map(sLink).join(', ')}`);
   (e.songs || []).filter(s => s.special).forEach(s => lines.push(`<b>${t(s.kind === 'ED' ? '특수 엔딩' : s.kind === 'OP' ? '특수 오프닝' : '삽입곡')}</b> ${esc(s.title)}`));
   if (e.endcard) lines.push(`<b>${t('엔드카드')}</b> ${pLink(e.endcard)}`);
-  return `<div class="ep">${n ? `<button class="chk ${seen ? 'on' : ''}" data-act="epset" data-no="${n}" data-k="${esc(w.k)}" aria-pressed="${!!seen}" aria-label="${esc(F('upTo', e.no))}">✓</button>` : ''}<div class="grow"><span class="no">${esc(F('epNo', e.no))}</span>${esc(tt[0] || '')}${lines.length ? `<div class="s">${lines.join('<br>')}</div>` : ''}</div></div>`;
+  return `<div class="ep">${n ? `<button class="chk ${seen ? 'on' : ''}" data-act="epset" data-no="${n}" data-k="${esc(w.k)}" aria-pressed="${!!seen}" aria-label="${esc(F('upTo', e.no))}">✓</button>` : ''}<div class="grow"><span class="no">${esc(F('epNo', e.no))}</span>${tt[0] ? sp(esc(tt[0])) : ''}${lines.length ? `<div class="s">${lines.join('<br>')}</div>` : ''}</div></div>`;
 }
 
 async function openPerson(id){
