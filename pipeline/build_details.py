@@ -554,8 +554,10 @@ def main():
     n_inh = 0
     for r in c['rows']:
         w = BY[r[0]]
-        if not w.get('ko') and w.get('ty') in ('T', 'O', 'M', 'S', 'V'):
+        if not w.get('ko') and w.get('ty') in ('T', 'O', 'S', 'V'):           # 극장판은 「제3화」·「제4장」처럼 편마다 제목이 달라 이어받지 않음
             pk = inherit_ko(r[0])
+            dj = set(re.findall(r'\d+', re.sub(r'[\(（](19|20)\d\d[\)）]', '', unicodedata.normalize('NFKC', w.get('ja') or ''))))
+            if pk and dj and set(re.findall(r'\d+', KO_SEASON.sub('', pk))) - dj: pk = None   # 이전 편 제목의 번호가 이번 편과 다르면 쓰지 않음
             if pk:
                 base = pk
                 for _ in range(3): base = KO_SEASON.sub('', base).strip()
