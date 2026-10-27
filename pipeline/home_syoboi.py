@@ -54,6 +54,7 @@ def pack(src_dir, name):
 
 def main():
     budget = sys.argv[1] if len(sys.argv) > 1 else '90'
+    pick = sys.argv[2] if len(sys.argv) > 2 else ''          # 일부 단계만: 예) laftel,namu_live
     load_env(); s3 = client(); B = os.environ['R2_BUCKET']; os.makedirs(RAW, exist_ok=True)
     say('===== 집 PC 수집 시작 (' + ', '.join(SRCS) + ') =====')
     if shutil.which('git'):
@@ -70,7 +71,7 @@ def main():
         except s3.exceptions.NoSuchKey: say(f'R2에 {SRC} 묶음이 아직 없습니다 (처음부터 수집)')
     # 수집 (병합·배포는 클라우드 갱신이 함)
     env = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
-    r = subprocess.run([sys.executable, 'run_all.py', '--home', '--budget-min', budget], cwd=ROOT, env=env)
+    r = subprocess.run([sys.executable, 'run_all.py', '--home', '--budget-min', budget] + (['--only', pick] if pick else []), cwd=ROOT, env=env)
     if r.returncode: say('수집에 실패한 항목이 있습니다 (pipeline/logs/summary.md 참고)')
     # 올리기: 출처별 묶음 + 실행 기록
     for SRC in SRCS:

@@ -61,7 +61,7 @@ def main():
     ap.add_argument('--home', action='store_true', help='집 PC 전용 단계만 실행 (병합·배포는 클라우드 실행이 맡음)'); a = ap.parse_args()
     shutil.rmtree(LOGS, ignore_errors=True); os.makedirs(os.path.join(LOGS, 'summary'))
     only = set(x for x in a.only.split(',') if x)
-    if a.home: only = set(HOME_ONLY)
+    if a.home: only = (set(x.strip() for x in a.only.split(',') if x.strip()) & HOME_ONLY) if a.only else set(HOME_ONLY)      # 집 PC: 고른 단계만, 안 고르면 다섯 단계 모두
     cat, cat_bak = os.path.join(ROOT, '..', 'site', 'data', 'catalog.json'), os.path.join(ROOT, 'raw', '_catalog.json')
     # 마지막으로 성공한 카탈로그(raw/_catalog.json)를 늘 우선 사용. 카탈로그 단계를 건너뛰는 날에도 저장소에 커밋된 옛 catalog.json이 배포되지 않게.
     if os.path.exists(cat_bak): os.makedirs(os.path.dirname(cat), exist_ok=True); shutil.copy(cat_bak, cat)

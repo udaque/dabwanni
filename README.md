@@ -74,14 +74,39 @@ Actions → 다봤니 데이터 갱신 → Run workflow. 한 번에 최대 약 5
    ```
 
 **실행**
-- 윈도우(파워셸): `pipeline\home_syoboi.ps1` 실행. 기록은 홈 폴더 `dabwanni-home.log`
+- 윈도우(파워셸): `pipeline` 폴더에서 `.\home_syoboi.ps1`. 기록은 홈 폴더 `dabwanni-home.log`
 - 맥·리눅스: `pipeline/home_syoboi.sh`
-- 뒤에 숫자를 붙이면 수집에 쓸 최대 시간(분)입니다. 기본 90분.
 - 끝나면 화면에 출처별 결과표가 나오고, `pipeline/logs/summary.md`에도 남습니다.
 
-**매일 자동으로**
-- 윈도우: 파워셸에서 `pipeline` 폴더로 이동한 뒤, `home_syoboi.ps1` 맨 위 주석의 `Register-ScheduledTask …` 한 줄을 한 번 실행하면 매일 새벽 1시에 돕니다.
+**윈도우에서 「이 시스템에서 스크립트를 실행할 수 없습니다」(UnauthorizedAccess)가 뜰 때**
+윈도우는 기본으로 파워셸 스크립트 실행을 막아 둡니다. 둘 중 하나로 합니다.
+- 그때그때 허용하며 실행 (설정을 바꾸지 않음): `powershell -ExecutionPolicy Bypass -File .\home_syoboi.ps1`
+- 내 계정에서만 영구 허용 (한 번만): `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` 를 실행하고 `Y`. 그다음부터는 `.\home_syoboi.ps1` 로 바로 실행됩니다.
+- 저장소를 압축 파일로 내려받아 풀었다면 「인터넷에서 받은 파일」 표시 때문에 계속 막힐 수 있습니다. `pipeline` 폴더에서 `Get-ChildItem -Recurse | Unblock-File` 을 한 번 실행하세요. git으로 받았다면 필요 없습니다.
+- 아래 작업 스케줄러 등록 줄에는 이미 실행 정책 우회가 들어 있어서, 자동 실행에는 따로 할 일이 없습니다.
+
+**실행 시간(최대 시간) 정하기**
+- 첫 번째 값이 수집에 쓸 최대 시간(분)입니다. 비우면 90분.
+- 예) 60분: 윈도우 `.\home_syoboi.ps1 60`, 맥 `pipeline/home_syoboi.sh 60`
+- 다섯 단계가 이 시간을 나눠 씁니다: 나무위키 실시간 40%, 쇼보이 20%, 라프텔·애니메테마즈 15%씩, Anitabi 10%. 시간이 다 되면 그 단계는 멈추고 다음 실행에서 이어 받습니다.
+
+**일부 단계만 실행하기**
+- 두 번째 값에 단계 이름을 쉼표로 적습니다. 단계 이름: `syoboi`(쇼보이), `laftel`(라프텔), `animethemes`(애니메테마즈), `anitabi`(Anitabi), `namu_live`(나무위키 실시간)
+- 예) 라프텔과 나무위키만 60분: 윈도우 `.\home_syoboi.ps1 60 laftel,namu_live`, 맥 `pipeline/home_syoboi.sh 60 laftel,namu_live`
+- 고른 단계만 돌아도 시간 몫은 위 비율대로라, 하나만 돌릴 땐 첫 번째 값을 넉넉히 주세요.
+
+**매일 자동으로 (시각 정하기)**
+- 윈도우: 파워셸에서 `pipeline` 폴더로 이동한 뒤 아래 한 줄을 한 번 실행하면 매일 새벽 1시에 돕니다(`home_syoboi.ps1` 맨 위 주석에도 있음).
+  ```
+  Register-ScheduledTask -TaskName "다봤니 집 PC 수집" -Trigger (New-ScheduledTaskTrigger -Daily -At 1am) -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$((Resolve-Path .\home_syoboi.ps1).Path)`"") -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable)
+  ```
+  - 시각: `-At 1am` 을 바꿉니다(예: `-At 2am`, `-At 12:30am`).
+  - 최대 시간·단계: 줄 끝 `` `"") `` 의 `` `" `` 와 `"` 사이에 값을 넣습니다. 예) 60분: `` …Path)`" 60") ``, 라프텔·나무위키만 60분: `` …Path)`" 60 laftel,namu_live") ``
+  - 이미 등록했다면 먼저 `Unregister-ScheduledTask -TaskName "다봤니 집 PC 수집" -Confirm:$false` 로 지우고 다시 등록합니다. 작업 스케줄러 앱에서 트리거 시각만 고쳐도 됩니다. 예전에 「다봤니 쇼보이 수집」이라는 이름으로 등록했다면 그 이름으로 지웁니다.
 - 맥: `crontab -e`에 `0 1 * * * /경로/dabwanni/pipeline/home_syoboi.sh >> ~/dabwanni-home.log 2>&1`
+  - 시각: 앞의 `0 1` 이 1시 0분입니다(2시 30분이면 `30 2`).
+  - 최대 시간·단계: `home_syoboi.sh 60 laftel,namu_live` 처럼 붙입니다.
+- 클라우드 갱신(한국 시간 새벽 3시 30분)보다 먼저 끝나게, 시작 시각 + 최대 시간이 3시 30분 전이 되도록 정하는 게 좋습니다. 겹쳐도 서로 지우지는 않지만(출처 묶음은 따로 올리고, 실행 기록은 올리기 직전에 합침), 겹치면 그날 집 PC 결과는 다음 날 반영됩니다.
 
 **확인**
 - 실행 결과표에서 syoboi·laftel·animethemes·anitabi·namu_live 줄이 모두 성공인지 봅니다.
