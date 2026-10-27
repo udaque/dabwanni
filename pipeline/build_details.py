@@ -29,6 +29,12 @@ def add_season_code(ko, code):
     s, c, p = m.groups()
     return ' '.join([ko] + ([f'{s}기'] if s else []) + ([f'{c}쿨'] if c else []) + ([f'{p}부'] if p else []))
 
+def _base_n(t):
+    """원제 비교용: 기호·공백·끝의 시즌 표시를 뗌"""
+    t = re.sub(r'[\(（](19|20)\d\d[\)）]', '', unicodedata.normalize('NFKC', t or ''))
+    t = re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？、,，.。]', '', t).lower()
+    return re.sub(r'(第\d+(期|クール|シーズン)|\d+(st|nd|rd|th)season|season\d+|part\d+|\d+)+$', '', t)
+
 def tmdb_title_ok(w, tm):
     """TMDB 한국어 제목. TMDB는 한 시리즈를 한 작품으로 묶고 시즌으로 나누는 경우가 많아(「바케모노가타리」 안에 「오프&몬스터 시즌」이 6시즌으로 들어 있음),
     2시즌 이후로 이어 붙인 작품은 TMDB 원제가 이 작품 원제와 이어질 때만 TMDB 한국어 제목을 씀."""
@@ -610,6 +616,9 @@ def main():
         if w.get('ko') or depth > 6: return w.get('ko')
         for rr in (details.get(k) or {}).get('relations') or []:
             if rr.get('type') == 'PREQUEL':
+                # 원제가 이어지는 이전 시즌만 (「物語シリーズ セカンドシーズン」이 이전 작품 「偽物語」의 한국어 제목을 받지 않게)
+                pj, mj = _base_n((BY.get(rr['k']) or {}).get('ja')), _base_n(w.get('ja'))
+                if not (pj and mj and (pj in mj or mj in pj)): continue
                 pk = inherit_ko(rr['k'], depth + 1)
                 if pk: return pk
         return None
