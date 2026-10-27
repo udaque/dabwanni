@@ -22,7 +22,7 @@ case "$1" in
     for d in raw/*/; do
       n=$(basename "$d")
       # 집 PC가 따로 모아 올리는 출처는 여기서 올리지 않음 (도중에 집 PC가 올린 새 판을 옛 판으로 덮어쓰지 않게)
-      case "$n" in syoboi|laftel|animethemes|anitabi) continue ;; esac
+      case "$n" in syoboi|laftel|animethemes|anitabi|namu_live) continue ;; esac
       tar --zstd -cf ".r2/$n.tar.zst" -C raw "$n"
     done
     cp -f raw/_runs.json raw/_catalog.json .r2/ 2>/dev/null || true

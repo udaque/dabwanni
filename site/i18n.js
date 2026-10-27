@@ -51,7 +51,7 @@ const I18N = {
   '많이 본 감독': ['よく見る監督', 'Top directors'], '많이 본 성우': ['よく見る声優', 'Top voice actors'], '많이 본 음악 담당': ['よく見る音楽担当', 'Top composers'],
   '많이 들은 주제가 가수': ['よく聴く主題歌アーティスト', 'Top theme song artists'], '많이 본 각본가': ['よく見る脚本家', 'Top writers'],
   '많이 본 캐릭터 디자이너': ['よく見るキャラクターデザイナー', 'Top character designers'],
-  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '시청처': ['視聴先', 'Watching on'], '라프텔': ['Laftel', 'Laftel'], '크런치롤': ['クランチロール', 'Crunchyroll'], '넷플릭스': ['Netflix', 'Netflix'], '티빙': ['TVING', 'TVING'], '아마존 프라임': ['Prime Video', 'Prime Video'], '기타': ['その他', 'Other'], '추가': ['追加', 'Add'], '서비스 이름': ['サービス名', 'Service name'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
+  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '시청처': ['視聴先', 'Watching on'], '라프텔': ['Laftel', 'Laftel'], '크런치롤': ['クランチロール', 'Crunchyroll'], '넷플릭스': ['Netflix', 'Netflix'], '티빙': ['TVING', 'TVING'], '아마존 프라임': ['Prime Video', 'Prime Video'], '왓챠': ['WATCHA', 'Watcha'], '웨이브': ['Wavve', 'Wavve'], '디즈니+': ['Disney+', 'Disney+'], '쿠팡플레이': ['Coupang Play', 'Coupang Play'], '유튜브': ['YouTube', 'YouTube'], '기타': ['その他', 'Other'], '추가': ['追加', 'Add'], '서비스 이름': ['サービス名', 'Service name'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
   // 상세
   '시작한 날': ['見始めた日', 'Started'], '다 본 날': ['見終えた日', 'Finished'], '다시 본 횟수': ['見返した回数', 'Rewatches'], '메모': ['メモ', 'Notes'],
   '기본 정보': ['基本情報', 'Overview'], '방영 시기': ['放送時期', 'Aired'], '형식': ['形式', 'Format'], '화수': ['話数', 'Episodes'],

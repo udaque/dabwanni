@@ -546,7 +546,7 @@ function infoPills(w){
 }
 function progText(w){ const m = marks[w.k] || {}, tot = total(w); return `${m.ep || 0}${tot ? ` <small>/ ${F('eps', tot)}</small>` : `<small>${F('eps', '').trim()}</small>`}`; }
 // 시청처: 어디서 보는지 (기본 목록 + 사용자가 추가한 곳)
-const WHERE = [['laftel', '라프텔'], ['crunchyroll', '크런치롤'], ['netflix', '넷플릭스'], ['tving', '티빙'], ['prime', '아마존 프라임'], ['etc', '기타']];
+const WHERE = [['laftel', '라프텔'], ['crunchyroll', '크런치롤'], ['netflix', '넷플릭스'], ['tving', '티빙'], ['prime', '아마존 프라임'], ['watcha', '왓챠'], ['wavve', '웨이브'], ['disney', '디즈니+'], ['coupang', '쿠팡플레이'], ['youtube', '유튜브'], ['etc', '기타']];
 const whereCustom = () => store.get('whereCustom') || [];
 function whereName(v){ const b = WHERE.find(x => x[0] === v); return b ? t(b[1]) : v; }
 function whereCtl(w){
@@ -715,7 +715,7 @@ function workHTML(w, d){
   const rel = (d?.relations?.length ? d.relations : (w.rel || []).map(k => ({k}))).map(r => ({...r, w: BYK.get(r.k)})).filter(r => r.w).sort((a, b) => (a.w.y || 9999) - (b.w.y || 9999) || (a.w.q || 0) - (b.w.q || 0));
   h += sec('관련 작품', rel.length ? `<div class="rows">${rel.map(r => `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(r.k)}">${esc(title(r.w))}</button><div class="s">${r.w.y || t('연도 미상')}${r.w.q ? ' ' + F('quarter', r.w.q) : ''} ${t(TYPE[r.w.ty])}${r.w.e ? ' ' + F('epCount', r.w.e) : ''}</div></div>${r.type ? `<span class="pill">${t(RT[r.type]) || esc(r.type)}</span>` : ''}</div>`).join('')}</div>` : nodata('연결된 작품이 없습니다.'), rel.length);
 
-  const ext = [w.al && ['AniList', 'https://anilist.co/anime/' + w.al], w.mal && ['MyAnimeList', 'https://myanimelist.net/anime/' + w.mal], w.adb && ['AniDB', 'https://anidb.net/anime/' + w.adb], w.tmdb && ['TMDB', 'https://www.themoviedb.org/tv/' + w.tmdb], w.sy && ['쇼보이 캘린더', 'https://cal.syoboi.jp/tid/' + w.sy], w.an && ['Annict', 'https://annict.com/works/' + w.an], w.bgm && ['Bangumi', 'https://bgm.tv/subject/' + w.bgm]].filter(Boolean);
+  const ext = [d?.namu && ['나무위키', d.namu], w.al && ['AniList', 'https://anilist.co/anime/' + w.al], w.mal && ['MyAnimeList', 'https://myanimelist.net/anime/' + w.mal], w.adb && ['AniDB', 'https://anidb.net/anime/' + w.adb], w.tmdb && ['TMDB', 'https://www.themoviedb.org/tv/' + w.tmdb], w.sy && ['쇼보이 캘린더', 'https://cal.syoboi.jp/tid/' + w.sy], w.an && ['Annict', 'https://annict.com/works/' + w.an], w.bgm && ['Bangumi', 'https://bgm.tv/subject/' + w.bgm]].filter(Boolean);
   h += sec('외부 링크', `<div class="rows">${ext.map(([n, u]) => `<div class="row"><a class="link" href="${u}" target="_blank" rel="noopener">${t(n)}</a></div>`).join('')}</div>`);
   return h;
 }

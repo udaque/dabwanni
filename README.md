@@ -57,13 +57,14 @@ Actions → 다봤니 데이터 갱신 → Run workflow. 한 번에 최대 약 5
   - 저장소의 `status/last-run.md`에 마지막 결과
 - 실패하면 「수집 실패」 이슈가 자동으로 생기고(이미 열려 있으면 댓글 추가), GitHub 앱 푸시와 메일이 옵니다.
 
-## 집 PC 수집 (쇼보이 캘린더·라프텔·애니메테마즈·Anitabi)
+## 집 PC 수집 (쇼보이 캘린더·라프텔·애니메테마즈·Anitabi·나무위키 실시간)
 이 네 출처는 GitHub 서버에서 접속을 막아서, 집 PC에서 받아 R2에 올려 둡니다. 새벽 클라우드 갱신(한국 시간 3시 30분)이 그걸 내려받아 병합·배포합니다.
 
 **준비 (한 번만)**
 1. 파이썬 3.10 이상 설치
 2. 이 저장소를 받기: `git clone https://github.com/udaque/dabwanni.git` (git이 있으면 실행할 때마다 코드를 최신으로 받습니다)
 3. 라이브러리: 윈도우 `py -m pip install boto3 zstandard`, 맥 `python3 -m pip install boto3 zstandard`
+   - 나무위키 실시간(실제 브라우저로 문서를 여는 단계)도 쓰려면 한 번 더: 윈도우 `py -m pip install playwright` 다음 `py -m playwright install chromium`, 맥 `python3 -m pip install playwright` 다음 `python3 -m playwright install chromium`. 설치하지 않으면 이 단계만 건너뜁니다.
 4. 홈 폴더(윈도우 `C:\Users\사용자이름`, 맥 `~`)에 `.dabwanni.env` 파일을 만들고, GitHub Secrets와 같은 값을 넣기
    ```
    R2_ACCOUNT_ID=...
@@ -83,7 +84,8 @@ Actions → 다봤니 데이터 갱신 → Run workflow. 한 번에 최대 약 5
 - 맥: `crontab -e`에 `0 1 * * * /경로/dabwanni/pipeline/home_syoboi.sh >> ~/dabwanni-home.log 2>&1`
 
 **확인**
-- 실행 결과표에서 syoboi·laftel·animethemes·anitabi 줄이 모두 성공인지 봅니다.
+- 실행 결과표에서 syoboi·laftel·animethemes·anitabi·namu_live 줄이 모두 성공인지 봅니다.
+- namu_live가 「Cloudflare 확인 화면이 풀리지 않음」으로 실패하면, 집 인터넷에서도 나무위키가 자동 브라우저를 막는 것입니다. 이 경우 확인 화면을 우회하지 않고 그 단계는 멈춥니다.
 - 다음 클라우드 갱신부터 사이트에 반영됩니다. 기다리기 싫으면 Actions에서 「다봤니 데이터 갱신」을 「일부 단계만」에 catalog를 넣고 실행하면 병합·배포만 바로 합니다.
 
 ## 내 컴퓨터에서 직접 실행

@@ -1,4 +1,4 @@
-"""집 PC에서 깃허브 서버로는 막히는 출처(쇼보이 캘린더·라프텔·애니메테마즈·Anitabi)를 수집해 R2에 올립니다. 윈도우·맥·리눅스 공통.
+"""집 PC에서 깃허브 서버로는 막히는 출처(쇼보이 캘린더·라프텔·애니메테마즈·Anitabi·나무위키 실시간)를 수집해 R2에 올립니다. 윈도우·맥·리눅스 공통.
 깃허브 액션 서버는 쇼보이 쪽 클라우드플레어 확인 화면에 막혀서, 이 단계만 집 인터넷에서 돌립니다.
 매일 클라우드 갱신(한국 시간 03:30)보다 먼저 끝나도록 새벽 1시쯤 돌리세요. 병합·배포는 클라우드 갱신이 합니다.
 
@@ -13,7 +13,7 @@ R2에는 sync_r2.sh와 같은 형식(raw/<출처>.tar.zst)으로 주고받습니
 import os, sys, io, json, tarfile, shutil, subprocess, datetime
 
 ROOT = os.path.dirname(os.path.abspath(__file__)); RAW = os.path.join(ROOT, 'raw')
-SRCS = ('syoboi', 'laftel', 'animethemes', 'anitabi')      # 깃허브 서버에서 막히는 출처들 (run_all.py의 HOME_ONLY와 같게)
+SRCS = ('syoboi', 'laftel', 'animethemes', 'anitabi', 'namu_live')      # 깃허브 서버에서 막히는 출처들 (run_all.py의 HOME_ONLY와 같게)
 
 def say(*a): print(datetime.datetime.now().strftime('%H:%M:%S'), *a, flush=True)
 

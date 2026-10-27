@@ -2,7 +2,7 @@
 끝나면 logs/summary.md에 결과표를 만들고, 실패한 출처가 있으면 종료 코드 1.
   python3 run_all.py --budget-min 320            # 정기 실행 (GitHub Actions 한 번 6시간 안)
   python3 run_all.py --only syoboi,tmdb          # 일부만
-  python3 run_all.py --home                      # 집 PC 전용 단계(쇼보이)만, 병합은 하지 않음"""
+  python3 run_all.py --home                      # 집 PC 전용 단계(쇼보이·라프텔·애니메테마즈·Anitabi·나무위키 실시간)만, 병합은 하지 않음"""
 import os, sys, json, time, subprocess, argparse, shutil, datetime
 ROOT = os.path.dirname(os.path.abspath(__file__)); LOGS = os.path.join(ROOT, 'logs')
 
@@ -19,14 +19,17 @@ STEPS = [
  ('music',          ['python3', 'collect_extra.py', 'music'], 0.08, 0),
  ('anitabi',        ['python3', 'collect_extra.py', 'pilgrimage'], 0.05, 0),
  ('laftel',         ['python3', 'collect_laftel.py'], 0.05, 0),
+ ('namu_live',      ['python3', 'collect_namu_live.py'], 0.05, 0),
  ('youtube',        ['python3', 'collect_youtube.py'], 0.03, 0),
  ('kowiki',         ['python3', 'collect_kowiki.py'], 0.04, 0),
  ('thumbhash',      ['python3', 'collect_thumbhash.py'], 0.05, 0),
  ('namu',           ['python3', 'collect_namu.py'], 0.10, 25),
 ]
 # 깃허브 액션 서버에서는 막히는 출처: 집 PC에서 home_syoboi.sh(run_all.py --home)로 따로 돌림
-HOME_ONLY = {'syoboi', 'laftel', 'animethemes', 'anitabi'}      # 깃허브 서버에서는 막히는 출처들(쇼보이·라프텔·애니메테마즈 520·Anitabi 403)이라 집 PC에서
-BUDGETED = {'thumbhash', 'kowiki', 'youtube', 'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
+HOME_ONLY = {'syoboi', 'laftel', 'animethemes', 'anitabi', 'namu_live'}
+# 집 PC 실행에서는 이 단계들만 도므로 시간 몫을 따로 둠 (나무위키는 문서마다 몇 초씩 쉬어 가장 오래 걸림)
+HOME_SHARE = {'syoboi': 0.2, 'laftel': 0.15, 'animethemes': 0.15, 'anitabi': 0.1, 'namu_live': 0.4}      # 깃허브 서버에서는 막히는 출처들(쇼보이·라프텔·애니메테마즈 520·Anitabi 403)이라 집 PC에서
+BUDGETED = {'namu_live', 'thumbhash', 'kowiki', 'youtube', 'wikidata', 'syoboi', 'jawiki', 'animethemes', 'tmdb', 'anilist', 'anilist_people', 'music', 'anitabi', 'laftel'}
 
 def last_ok(name):
     p = os.path.join(ROOT, 'raw', '_runs.json')
@@ -74,6 +77,7 @@ def main():
         left = (deadline - time.time()) / 60 - 15          # 마지막 병합·배포 몫 15분
         if left < 3: results.append((name, 'skipped', '시간 예산 없음')); continue
         c = [sys.executable if x == 'python3' else x for x in cmd]
+        if a.home and name in HOME_SHARE: share = HOME_SHARE[name]
         if name in BUDGETED: c += ['--budget-min', str(round(max(3, min(left, a.budget_min * share if name != 'anilist' else left - 30)), 1))]
         print(f'\n===== {name} 시작 =====', flush=True)
         with open(os.path.join(LOGS, f'{name}.out'), 'w', encoding='utf-8') as out:
