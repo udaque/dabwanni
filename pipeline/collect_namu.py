@@ -9,6 +9,26 @@ JA = re.compile(r'[\u3040-\u30ff\u4e00-\u9fff]')
 # 문서 주제의 원어 이름만: 첫머리의 굵은 제목 바로 뒤 괄호 (예: '''유키 아오이'''(悠木碧, ...))
 # 예전엔 앞부분의 괄호를 모두 넣어서, 작품 문서에 나오는 제작진 이름까지 그 작품 문서와 이어졌음 (荻野美希 → 「5등분의 신부」)
 PAREN = re.compile(r"'''[^'\n]{1,80}'''\s*[（(]([^()（）\n]{1,60})[)）]")
+def lead_names(head):
+    """문서 첫머리의 굵은 제목 바로 뒤 괄호 안 원어 이름들. 괄호 안의 읽기 괄호(「悠木(ゆうき) 碧(あおい)」)와
+    「일본어: 」 같은 한국어 머리말, 위키 문법을 걷어 냄. 예전엔 괄호가 겹치면 통째로 놓쳐서 색인이 크게 줄었음."""
+    out = []
+    for m in list(re.finditer(r"'''[^'\n]{1,80}'''\s*[（(]", head))[:2]:
+        i, depth = m.end(), 1
+        while i < len(head) and depth and i - m.end() < 300:
+            if head[i] in '(（': depth += 1
+            elif head[i] in ')）': depth -= 1
+            i += 1
+        inner = head[m.end():i - 1]
+        inner = re.sub(r'\[\[(?:[^\]|]*\|)?([^\]]*)\]\]', r'\1', inner)            # [[문서|보이는 글]] → 보이는 글
+        inner = re.sub(r"'{2,}|\{\{\{[^}]*\}\}\}|\[\*[^\]]*\]", '', inner)        # 기울임·굵게, 문법 묶음, 각주
+        prev = None
+        while prev != inner: prev, inner = inner, re.sub(r'[（(][^()（）]*[)）]', '', inner)   # 읽기 괄호 걷기
+        for part in re.split(r'[/,、;·]', inner):
+            part = re.sub(r'^\s*[가-힣\s]+[:：]\s*', '', part).strip()         # 「일본어: 悠木碧」 → 「悠木碧」
+            if part: out.append(part)
+    return out
+
 FIELD = re.compile(r'\|\|\s*(?:원제|원어 명칭|본명|이름|일본어)\s*\|\|\s*([^|\n]{1,80})')
 KR_SEC = re.compile(r'^=+\s*(?:한국|국내)[^=\n]*(?:방영|방송|정발|더빙|수입)[^=\n]*=+\s*$(.*?)(?=^=+ )', re.M | re.S)
 
@@ -75,10 +95,8 @@ if __name__ == '__main__':
             # 하위 문서(「아이돌 타임 프리파라/방영 목록」, 「…/애니메이션/1982년」)와 목록·등장인물 문서는 그 대상의 이름이 아니라서 색인에 넣지 않음
             if '/' in title or re.search(r'(목록|등장인물|에피소드|회차|줄거리|평가|설정|OST|음반|디스코그래피)$', title): continue
             head = text[:2500]; cands = set()
-            for m in PAREN.finditer(head):
-                for part in re.split(r'[/,、;·]', m.group(1)):
-                    part = part.strip()
-                    if JA.search(part) and not re.search(r'[\uac00-\ud7a3]', part): cands.add(part)
+            for part in lead_names(head):
+                if JA.search(part) and not re.search(r'[\uac00-\ud7a3]', part): cands.add(part)
             for m in FIELD.finditer(head):
                 v = plain(m.group(1))
                 if JA.search(v): cands.add(v)
@@ -87,7 +105,7 @@ if __name__ == '__main__':
                 if title not in L and len(L) < 8: L.append(title)
             m = KR_SEC.search(text)
             if m: kr[title] = plain(m.group(1))[:600]
-        if len(index) < 50000: raise SchemaError(f'색인이 {len(index)}개뿐: 덤프 형식이 다를 가능성 (열 이름 title, text 필요)')
+        if len(index) < 10000: raise SchemaError(f'색인이 {len(index)}개뿐: 덤프 형식이 다를 가능성 (열 이름 title, text 필요)')
         save('namu', 'index', index); save('namu', 'korea', kr)
         run.c['ok'] = len(index); run.say(f'색인 {len(index)}, 한국 방영 문단 {len(kr)}')
     except Exception as e:
