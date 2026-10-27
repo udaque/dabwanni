@@ -20,6 +20,15 @@ def bucket(s):
 
 def strip_disambig(t): return re.sub(r'\s*\([^)]*\)\s*$', '', t or '').strip()
 
+def add_season_code(ko, code):
+    """한국어 제목 뒤에 시즌·쿨 표시를 붙임. 화면 꼬리표와 같은 부호(s3c2 등)에서 만들어, 「1기 2쿨」을 「2기」로 잘못 붙이지 않게 함."""
+    if not ko or not code or re.search(r'(\d|기|시즌|쿨|부\b|파트|[Ss]eason|[Pp]art|파이널|완결)', ko): return ko
+    if code == 'f': return f'{ko} 완결편'
+    m = re.fullmatch(r'(?:s(\d+))?(?:c(\d+))?(?:b(\d+))?', code)
+    if not m or not any(m.groups()): return ko
+    s, c, p = m.groups()
+    return ' '.join([ko] + ([f'{s}기'] if s else []) + ([f'{c}쿨'] if c else []) + ([f'{p}부'] if p else []))
+
 def clean_ko(ko):
     """「Gwihwanjaui … 2 (귀환자의 마법은 특별해야 합니다2)」처럼 로마자 표기 뒤 괄호에 한글 제목이 든 경우 괄호 안 한글만 씀"""
     m = re.fullmatch(r'\s*([^()가-힣]+?)\s*[\(（]([^()（）]*[가-힣][^()（）]*)[\)）]\s*', ko or '')
@@ -329,7 +338,7 @@ def main():
         w['_lfs'] = _lfs
         for _src, _t in (('cat', w.get('ko')), ('tmdb', ((tm or {}).get('titles') or {}).get('ko')), ('kowiki', (ld('kowiki') or {}).get('title')), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
-        if ko: ko = add_season(add_arc(ko, w.get('ja')), w.get('ja'), w.get('r'), roman=w.get('_pre'))
+        if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
         if ko: w['ko'] = ko
         cur_work[0] = (w.get('ja'), ko)
         if not any((al, sy, at, tm, jw, mu, ab)):
@@ -600,7 +609,7 @@ def main():
             if pk:
                 base = pk
                 for _ in range(3): base = KO_SEASON.sub('', base).strip()
-                w['ko'] = add_season(base, w.get('ja'), w.get('r'), roman=w.get('_pre')); w['ko_inherited'] = 1; n_inh += 1
+                w['ko'] = add_season_code(base, season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))); w['ko_inherited'] = 1; n_inh += 1
     print(f'이전 시즌 한국어 제목 이어받음 {n_inh}편')
     for r in c['rows']:
         w = BY[r[0]]
