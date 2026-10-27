@@ -154,9 +154,10 @@ def nja(t):
     t = re.sub(r'[\(（]\s*(19|20)\d\d\s*[\)）]', '', t)          # 「タヌキとキツネ (2026)」의 연도 꼬리는 비교에서 뺌
     t = re.sub(r'[第割]\s*(\d+)\s*クール', r'\1cour', t)          # 「第2クール」 (원천의 오타 「割2クール」 포함)
     t = re.sub(r'^\s*(OVA|OAD|ONA|劇場版OVA)\s+', '', t)               # 「OVA ケガレボシ」 = 「ケガレボシ」
-    return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】]', '', t)
+    return re.sub(r'[\s「」『』""“”‘’\'"!?！？・･、。,.:：;；~〜\-－―ー()（）\[\]【】/／]', '', t)
 def nro(t):
     t = unicodedata.normalize('NFKD', t or '').encode('ascii', 'ignore').decode().lower()
+    t = re.sub(r'\(\s*(19|20)\d\d\s*\)', '', t)                 # 「Shibuya Hachi (2025) TV」의 연도 꼬리
     t = re.sub(r'^\s*(ova|oad|ona)\s+', '', t)
     t = re.sub(r'\b(part|cour|season)\s*(iv|iii|ii)\b', lambda m: m.group(1) + {'ii': '2', 'iii': '3', 'iv': '4'}[m.group(2)], t)   # 「Part II」 = 「Part 2」 (겹글자 줄이기 전에)
     t = re.sub(r'[^a-z0-9]', '', t)
