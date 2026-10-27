@@ -25,7 +25,20 @@ case "$1" in
       case "$n" in syoboi|laftel|animethemes|anitabi|namu_live) continue ;; esac
       tar --zstd -cf ".r2/$n.tar.zst" -C raw "$n"
     done
-    cp -f raw/_runs.json raw/_catalog.json .r2/ 2>/dev/null || true
+    cp -f raw/_catalog.json .r2/ 2>/dev/null || true
+    # 실행 기록: 올리기 직전 R2 최신판을 받아, 집 PC 단계 기록은 R2 쪽 것을 살리고 나머지만 이번 실행 것으로 (집 PC가 도중에 올린 기록을 덮지 않게)
+    if [ -f raw/_runs.json ]; then
+      $S3 cp "s3://$R2_BUCKET/raw/_runs.json" .r2/_runs.remote.json 2>/dev/null || echo '{}' > .r2/_runs.remote.json
+      python3 - << 'PY'
+import json
+mine = json.load(open('raw/_runs.json')); cur = json.load(open('.r2/_runs.remote.json'))
+HOME = {'syoboi', 'laftel', 'animethemes', 'anitabi', 'namu_live'}
+out = {k: v for k, v in mine.items() if k.split('#')[0] not in HOME}
+out.update({k: v for k, v in cur.items() if k.split('#')[0] in HOME})
+json.dump(out, open('.r2/_runs.json', 'w'), indent=1)
+PY
+      rm -f .r2/_runs.remote.json
+    fi
     $S3 sync .r2/ "s3://$R2_BUCKET/raw/"
     echo "보관 완료: $(du -sh .r2 | cut -f1)" ;;
   logs)

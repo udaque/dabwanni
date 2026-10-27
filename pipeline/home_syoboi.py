@@ -76,7 +76,16 @@ def main():
     for SRC in SRCS:
         if os.path.isdir(os.path.join(RAW, SRC)):
             z = pack(RAW, SRC); s3.put_object(Bucket=B, Key=f'raw/{SRC}.tar.zst', Body=z); say(f'올림: {SRC}.tar.zst ({len(z)//1024}KB)')
-    if os.path.exists(os.path.join(RAW, '_runs.json')): s3.upload_file(os.path.join(RAW, '_runs.json'), B, 'raw/_runs.json'); say('올림: _runs.json')
+    # 실행 기록은 클라우드 갱신과 함께 쓰는 파일이라, 올리기 직전에 R2의 최신판을 다시 받아 집 PC 단계 기록만 바꿔 넣음
+    # (그대로 덮어쓰면 그사이 클라우드가 남긴 기록이 지워짐)
+    lp = os.path.join(RAW, '_runs.json')
+    if os.path.exists(lp):
+        mine = json.load(open(lp, encoding='utf-8'))
+        try: cur = json.loads(s3.get_object(Bucket=B, Key='raw/_runs.json')['Body'].read())
+        except Exception: cur = {}
+        for k, v in mine.items():
+            if k.split('#')[0] in SRCS: cur[k] = v
+        s3.put_object(Bucket=B, Key='raw/_runs.json', Body=json.dumps(cur, indent=1).encode()); say('올림: _runs.json (집 PC 단계 기록만 합침)')
     sm = os.path.join(ROOT, 'logs', 'summary.md')
     if os.path.exists(sm): print(open(sm, encoding='utf-8').read()[-1500:])
     say('===== 끝 =====')
