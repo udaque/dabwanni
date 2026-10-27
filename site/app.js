@@ -196,7 +196,7 @@ async function loadIdx(){
   if (!IDX.people) IDX.people = await getJSON('data/people/index.json') || {};
   if (!IDX.studios) IDX.studios = await getJSON('data/studios/index.json') || {};
 }
-function save(){ for (const k in marks) { const m = marks[k]; if (!m.w && !m.i && !m.ep && !m.rate && !m.memo && !m.re && !m.start && !m.end) delete marks[k]; } store.set('marks', marks); }
+function save(){ for (const k in marks) { const m = marks[k]; if (!m.w && !m.i && !m.ep && !m.rate && !m.memo && !m.re && !m.start && !m.end && !m.where) delete marks[k]; } store.set('marks', marks); }
 const M = k => marks[k] || (marks[k] = {});
 
 function onClick(e){
@@ -211,6 +211,20 @@ function onClick(e){
       save(); refresh(k); return;
     }
     if ((act === 'ep+' || act === 'ep-') && e.detail === 0) { setEp(k, (M(k).ep || 0) + (act === 'ep+' ? 1 : -1)); return; }   // 키보드로 누른 경우만 (손가락·마우스는 아래 길게 누르기 처리)
+    if (act === 'whereOpen') { openWhere(el, k); return; }
+    if (act === 'wherePick') { const m = M(k), v = el.dataset.v; m.where === v ? delete m.where : (m.where = v); save(); closeWhere(); refresh(k); return; }
+    if (act === 'whereDel') { const v = el.dataset.v; store.set('whereCustom', whereCustom().filter(x => x !== v)); for (const kk in marks) if (marks[kk].where === v) delete marks[kk].where; save(); refresh(k); const menu = el.closest('.wmenu'); if (menu) menu.innerHTML = whereMenu(k); return; }
+    if (act === 'whereAdd') {
+      const box = el.closest('.wadd');
+      box.innerHTML = `<input class="win" type="text" maxlength="20" placeholder="${esc(t('서비스 이름'))}" enterkeyhint="done"><button class="wok" data-act="whereAddOk" data-k="${esc(k)}">${t('추가')}</button>`;
+      box.querySelector('input').focus(); return;
+    }
+    if (act === 'whereAddOk') {
+      const inp = el.parentElement.querySelector('input'), name = (inp.value || '').trim();
+      if (!name) { inp.focus(); return; }
+      const list = whereCustom(); if (!list.includes(name) && !WHERE.some(x => t(x[1]) === name)) store.set('whereCustom', [...list, name]);
+      const m = M(k); m.where = WHERE.find(x => t(x[1]) === name)?.[0] || name; save(); closeWhere(); refresh(k); return;
+    }
     if (act === 'epset') { const n = +el.dataset.no, cur = M(k).ep || 0; setEp(k, cur >= n ? n - 1 : n); return; }
     if (act === 'rate') { const m = M(k), n = +el.dataset.n; m.rate = m.rate === n ? 0 : n; save(); refresh(k); return; }
     if (act === 're+' || act === 're-') { const m = M(k); m.re = Math.max(0, (m.re || 0) + (act === 're+' ? 1 : -1)); save(); refresh(k); return; }
@@ -417,6 +431,11 @@ function drawPicker(scroll){
     ys.map(y => `<button class="yb ${y === pk.y ? 'on' : ''}" data-py="${y}">${y}<span class="pill">${fmtN(c.get(y)[0])}</span></button>`).join('')}</div>`).join('');
   if (scroll) { const b = $('#pkY').querySelector('.yb.on'); if (b) $('#pkY').scrollTop = b.offsetTop - $('#pkY').clientHeight / 2; }
 }
+document.addEventListener('click', e => { if (!e.target.closest('.where')) closeWhere(); }, true);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.classList?.contains('win')) { e.preventDefault(); e.target.parentElement.querySelector('.wok')?.click(); }
+  if (e.key === 'Escape') closeWhere();
+});
 document.addEventListener('click', e => {
   if ($('#picker').hidden) return;
   if (e.target.closest('[data-pclose]')) { closePicker(); return; }
@@ -449,6 +468,7 @@ function refresh(k){
     if (a === 'rate') el.classList.toggle('on', (m.rate || 0) >= +el.dataset.n);
     if (el.dataset.out === 'ep') el.innerHTML = progText(w);
     if (el.dataset.out === 're') el.textContent = F('times', m.re || 0);
+    if (el.dataset.out === 'where') { el.textContent = m.where ? whereName(m.where) : t('시청처'); el.closest('.wbtn')?.classList.toggle('on', !!m.where); }
     if (el.dataset.field === 'start' || el.dataset.field === 'end') el.value = m[el.dataset.field] || '';
     if (el.classList.contains('badges')) el.innerHTML = badges(w);
   });
@@ -525,6 +545,27 @@ function infoPills(w){
   return p.join('');
 }
 function progText(w){ const m = marks[w.k] || {}, tot = total(w); return `${m.ep || 0}${tot ? ` <small>/ ${F('eps', tot)}</small>` : `<small>${F('eps', '').trim()}</small>`}`; }
+// 시청처: 어디서 보는지 (기본 목록 + 사용자가 추가한 곳)
+const WHERE = [['laftel', '라프텔'], ['crunchyroll', '크런치롤'], ['netflix', '넷플릭스'], ['tving', '티빙'], ['prime', '아마존 프라임'], ['etc', '기타']];
+const whereCustom = () => store.get('whereCustom') || [];
+function whereName(v){ const b = WHERE.find(x => x[0] === v); return b ? t(b[1]) : v; }
+function whereCtl(w){
+  const v = (marks[w.k] || {}).where;
+  return `<div class="where"><button class="wbtn ${v ? 'on' : ''}" data-act="whereOpen" data-k="${esc(w.k)}" aria-haspopup="listbox"><span data-k="${esc(w.k)}" data-out="where">${esc(v ? whereName(v) : t('시청처'))}</span><span class="car">▾</span></button></div>`;
+}
+function whereMenu(k){
+  const v = (marks[k] || {}).where, kk = esc(k);
+  const item = (id, label, custom) => `<li><button class="wopt ${v === id ? 'on' : ''}" data-act="wherePick" data-k="${kk}" data-v="${esc(id)}" role="option" aria-selected="${v === id}"><span>${esc(label)}</span>${v === id ? '<span class="ck">✓</span>' : ''}</button>${custom ? `<button class="wdel" data-act="whereDel" data-k="${kk}" data-v="${esc(id)}" aria-label="${esc(F('delItem', label))}">✕</button>` : ''}</li>`;
+  return `<ul class="wlist" role="listbox">${WHERE.map(([id, l]) => item(id, t(l))).join('')}${whereCustom().map(c => item(c, c, true)).join('')}</ul>
+    <div class="wadd"><button class="wopt add" data-act="whereAdd" data-k="${kk}">＋ ${t('추가')}</button></div>`;
+}
+function closeWhere(){ document.querySelectorAll('.wmenu').forEach(x => x.remove()); document.querySelectorAll('.wbtn.open').forEach(x => x.classList.remove('open')); }
+function openWhere(btn, k){
+  const was = btn.classList.contains('open'); closeWhere(); if (was) return;
+  btn.classList.add('open');
+  const menu = document.createElement('div'); menu.className = 'wmenu'; menu.innerHTML = whereMenu(k);
+  btn.parentElement.appendChild(menu);
+}
 function progCtl(w){ return `<div class="prog"><button class="step" data-act="ep-" data-k="${esc(w.k)}" aria-label="${t('본 회차 줄이기')}">−</button><span class="now" data-k="${esc(w.k)}" data-out="ep">${progText(w)}</span><button class="step" data-act="ep+" data-k="${esc(w.k)}" aria-label="${t('본 회차 늘리기')}">+</button></div>`; }
 function card(w){
   const m = marks[w.k] || {}, src = img(w), k = esc(w.k);
@@ -592,7 +633,7 @@ function workHTML(w, d){
   let h = `<div class="shead">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="imgFallback(this)">` : '<div class="ph"></div>'}
     <div><h2 class="${S.lang === 'ja' ? 'ja' : ''}">${titleHTML(w)}</h2><dl class="tl">${titles.map(([l, v, c]) => `<dt>${l}</dt><dd class="${c}">${esc(v)}</dd>`).join('')}</dl></div></div>
     <div class="sacts"><button class="tg w ${m.w ? 'on' : ''}" data-act="w" data-k="${k}">${t('봤음')}</button><button class="tg i ${m.i ? 'on' : ''}" data-act="i" data-k="${k}">${t('관심')}</button></div>
-    <div class="sprog">${progCtl(w)}</div>`;
+    <div class="sprog">${progCtl(w)}${whereCtl(w)}</div>`;
 
   // 내 기록
   h += sec('내 기록', `<dl class="mylog">

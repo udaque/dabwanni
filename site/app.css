@@ -106,7 +106,25 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 .prog .step{flex:none;width:34px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font-size:18px;font-weight:700;line-height:1;padding:0}
 .prog .now{flex:1;text-align:center;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums;font-size:14px}
 .prog .now small{color:var(--sub);font-weight:500}
-.sprog{padding:4px 18px 0}.sprog .prog{padding:0;max-width:260px}
+.sprog{padding:4px 18px 0;display:flex;align-items:center;gap:10px}.sprog .prog{padding:0;max-width:260px;flex:1}
+/* 시청처 고르기 (직접 만든 펼침 목록) */
+.where{position:relative;flex:none}
+.wbtn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--sub);font-size:14px;font-weight:600;white-space:nowrap;max-width:150px}
+.wbtn>span:first-child{overflow:hidden;text-overflow:ellipsis}
+.wbtn.on{color:var(--ink);border-color:var(--ink)}
+.wbtn .car{font-size:11px;transition:transform .15s}.wbtn.open .car{transform:rotate(180deg)}
+.wmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:6px;max-height:320px;overflow:auto}
+.wlist{list-style:none;margin:0;padding:0}
+.wlist li{display:flex;align-items:center}
+.wopt{flex:1;display:flex;align-items:center;justify-content:space-between;gap:10px;height:38px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--ink);font-size:15px;text-align:left;white-space:nowrap}
+.wopt:hover,.wopt:focus-visible{background:var(--chip)}
+.wopt.on{font-weight:700}.wopt .ck{color:var(--want);font-weight:700}
+.wdel{flex:none;width:30px;height:30px;border:0;border-radius:6px;background:none;color:var(--sub);font-size:13px}
+.wdel:hover{background:var(--chip)}
+.wadd{display:flex;gap:6px;border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.wopt.add{color:var(--want);font-weight:600;justify-content:flex-start}
+.win{flex:1;min-width:0;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:16px}
+.wok{flex:none;height:36px;padding:0 12px;border:0;border-radius:8px;background:var(--ink);color:var(--surface);font-size:14px;font-weight:700;white-space:nowrap}
 .mylog{display:grid;grid-template-columns:auto 1fr;gap:10px 14px;align-items:center;font-size:14px}
 .mylog dt{color:var(--sub);white-space:nowrap}.mylog dd{margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .stars{display:flex;gap:2px}

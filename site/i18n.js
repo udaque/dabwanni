@@ -51,7 +51,7 @@ const I18N = {
   '많이 본 감독': ['よく見る監督', 'Top directors'], '많이 본 성우': ['よく見る声優', 'Top voice actors'], '많이 본 음악 담당': ['よく見る音楽担当', 'Top composers'],
   '많이 들은 주제가 가수': ['よく聴く主題歌アーティスト', 'Top theme song artists'], '많이 본 각본가': ['よく見る脚本家', 'Top writers'],
   '많이 본 캐릭터 디자이너': ['よく見るキャラクターデザイナー', 'Top character designers'],
-  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
+  '연도 미상': ['年不明', 'Unknown year'], '미정': ['未定', 'TBA'], '시청처': ['視聴先', 'Watching on'], '라프텔': ['Laftel', 'Laftel'], '크런치롤': ['クランチロール', 'Crunchyroll'], '넷플릭스': ['Netflix', 'Netflix'], '티빙': ['TVING', 'TVING'], '아마존 프라임': ['Prime Video', 'Prime Video'], '기타': ['その他', 'Other'], '추가': ['追加', 'Add'], '서비스 이름': ['サービス名', 'Service name'], '뮤직비디오': ['MV', 'Music video'], '미상': ['不明', 'Unknown'],
   // 상세
   '시작한 날': ['見始めた日', 'Started'], '다 본 날': ['見終えた日', 'Finished'], '다시 본 횟수': ['見返した回数', 'Rewatches'], '메모': ['メモ', 'Notes'],
   '기본 정보': ['基本情報', 'Overview'], '방영 시기': ['放送時期', 'Aired'], '형식': ['形式', 'Format'], '화수': ['話数', 'Episodes'],
@@ -161,6 +161,7 @@ const FMT = {
   quarterMonths: {ko: q => ['1~3월', '4~6월', '7~9월', '10~12월'][q - 1], ja: q => ['1〜3月', '4〜6月', '7〜9月', '10〜12月'][q - 1], en: q => ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]},
   units: {ko: {d: '일', h: '시간', m: '분', s: '초'}, ja: {d: '日', h: '時間', m: '分', s: '秒'}, en: {d: 'd', h: 'h', m: 'min', s: 'sec'}},
   times: {ko: n => `${n}회`, ja: n => `${n}回`, en: n => `${n}×`},
+  delItem: {ko: s => `${s} 지우기`, ja: s => `${s}を削除`, en: s => `Remove ${s}`},
   score: {ko: n => `${n}점 <span class="s">(AniList 100점 만점)</span>`, ja: n => `${n}点 <span class="s">（AniList 100点満点）</span>`, en: n => `${n} <span class="s">/ 100 on AniList</span>`},
   popularity: {ko: n => `${n}명이 목록에 담음`, ja: n => `${n}人がリストに追加`, en: n => `on ${n} lists`},
   places: {ko: n => `장소 ${n}곳`, ja: n => `${n}か所`, en: n => `${n} places`},
