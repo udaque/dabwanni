@@ -37,6 +37,10 @@ def _base_n(t):
 
 def SEASON_STRIP(t): return re.sub(r'\s*(\d+\s*기|\d+\s*쿨|시즌\s*\d+|파트\s*\d+)(\s*\d+\s*쿨)?\s*$', '', t or '').strip()
 
+def edu_title(t, w):
+    """영어 교육용 상품 제목(「무민 잉글리쉬」)처럼 원제에 없는 「잉글리시」가 붙은 한국어 제목은 작품 제목으로 쓰지 않음"""
+    return bool(re.search(r'잉글리[시쉬]', t)) and not re.search(r'english|イングリッシュ', ' '.join(x for x in (w.get('ja'), w.get('r'), w.get('en')) if x), re.I)
+
 def nl_clean(t):
     """나무위키 문서 제목 정리: 넘겨주기 꼬리(「유루캠△?from=ゆるキャン△」의 「?from=…」)를 뗌"""
     return re.split(r'\?', t or '', 1)[0].strip() or None
@@ -379,7 +383,7 @@ def main():
         # 여러 작품이 같은 문서로 이어졌으면(「아가루아니메」 같은 배급·목록 문서) 작품 문서가 아니라고 보고 버림
         _nl_ko = _nlk if _nlk and re.search(r'[가-힣]', _nlk) and _nlk not in (w.get('ja') or '') and not nl_shared(NLUSE.get(_nlk, ())) else None
         for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('namulive', _nl_ko), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
-            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); w['_kosrc'] = _src; break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
+            if _t and _digits_ok(_t) and not edu_title(_t, w) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); w['_kosrc'] = _src; break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
         if (OVR.get(k) or {}).get('ko'): ko = OVR[k]['ko']                  # 직접 정한 값이 가장 우선 (overrides.json)
         if ko: w['ko'] = ko
