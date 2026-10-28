@@ -56,6 +56,10 @@ def tmdb_title_ok(w, tm):
     import difflib
     t = (tm or {}).get('titles') or {}
     ko, tj = t.get('ko'), t.get('ja')
+    if ko and w.get('ty') == 'M' and tj and w.get('ja'):
+        # 극장판이 TV 시리즈의 TMDB 번호에 이어진 경우(「ムーミン谷の彗星」 → 「楽しいムーミン一家」) TV 제목을 쓰지 않음
+        n0 = lambda s: re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？]', '', unicodedata.normalize('NFKC', s)).lower()
+        if not (n0(tj) in n0(w['ja']) and len(n0(tj)) >= len(n0(w['ja'])) * 0.6): return None
     if not ko or not w.get('tms') or int(w.get('tms') or 1) <= 1 or not tj or not w.get('ja'): return ko
     n = lambda s: re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？]', '', unicodedata.normalize('NFKC', s)).lower()
     a_, b_ = n(tj), n(w['ja'])
