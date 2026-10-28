@@ -14,7 +14,7 @@ import argparse, datetime, json, random, time, unicodedata, urllib.parse, urllib
 from common import *
 
 SITE_CATALOG = 'https://dabwanni.pages.dev/data/catalog.json'      # 배포된 목록 (병합 단계가 채운 한국어 제목이 들어 있음)
-V = 1
+V = 2      # 2: 원제가 문서 앞부분(1,000자 안)에 있어야 하고, 한자 한 글자 문서(「描」)·관련 없는 문서를 거름. 1판 기록은 다시 확인
 SEASON_KO = re.compile(r'\s*(\d+\s*기|\d+\s*쿨|\d+\s*부|시즌\s*\d+|파트\s*\d+|완결편)(\s*\d+\s*쿨)?\s*$')
 
 def norm(t): return re.sub(r'[\s・･·「」『』〈〉《》()（）\[\]【】~〜\-－―!！?？、。,，.:：/／&＆]', '', unicodedata.normalize('NFKC', t or '')).lower()
@@ -35,12 +35,15 @@ def main():
     except ImportError:
         r = Run('namu_live'); r.status, r.reason = 'skipped', 'playwright가 없음: pip install playwright && python -m playwright install chromium'; r.finish(); sys.exit(0)
     # 배포된 목록의 한국어 제목 (없으면 작품 목록 그대로)
-    ko_of = {}
+    ko_of, base_ko = {}, {}
     try:
         req = urllib.request.Request(SITE_CATALOG, headers={'User-Agent': UA})
         c = json.load(urllib.request.urlopen(req, timeout=60)); F = c['fields']
         ki, kk = F.index('k'), F.index('ko')
         ko_of = {r[ki]: r[kk] for r in c['rows'] if r[kk]}
+        jai = F.index('ja')
+        for r in c['rows']:                                   # 같은 원제(시즌 표시 뺀)의 다른 작품 한국어 제목: 「ダンダダン 3」 → 「단다단」
+            if r[kk] and r[jai]: base_ko.setdefault(norm(ja_base(r[jai])), SEASON_KO.sub('', r[kk]).strip())
     except Exception as e: print('배포된 목록을 못 받아 한국어 제목 없이 진행:', e)
     cy = datetime.date.today().year
     W = [w for w in load_catalog() if w.get('ja') and w.get('ty') in ('T', 'O', 'M', 'V') and (w.get('y') or 0) >= cy - 1]
@@ -82,7 +85,7 @@ def main():
                 if not run.time_left(): run.status, run.reason = 'partial', '시간 예산 소진, 다음 실행에서 이어 받음'; break
                 jb = norm(ja_base(w['ja']))
                 cands = []
-                ko = ko_of.get(w['k'])
+                ko = ko_of.get(w['k']) or base_ko.get(jb)
                 if ko:
                     base = SEASON_KO.sub('', ko).strip()
                     cands += [f'{base}/애니메이션', base]
@@ -92,8 +95,9 @@ def main():
                     if title in tried: return False
                     tried.add(title)
                     u, text = open_doc(title)
-                    if u and jb and jb in norm((text or '')[:6000]):      # 본문 앞부분에 일본어 원제가 그대로 있을 때만
-                        t = urllib.parse.unquote(u.split('/w/', 1)[1].split('#')[0])
+                    t = urllib.parse.unquote(u.split('/w/', 1)[1].split('#')[0].split('?')[0]) if u else ''      # 넘겨주기 꼬리 「?from=…」 뗌
+                    head = (t, t.split('/')[0])
+                    if u and jb and jb in norm((text or '')[:1000]) and re.search(r'[가-힣]', head[1]) and head[1] not in w['ja']:   # 앞부분 1,000자 안에 원제, 한글 제목, 원제의 일부 글자 문서 아님
                         rec.update(url='https://namu.wiki/w/' + urllib.parse.quote(t), title=t, ko=t.split('/')[0]); return True
                     return False
                 ok = any(check(t) for t in cands)

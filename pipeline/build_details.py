@@ -35,6 +35,15 @@ def _base_n(t):
     t = re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？、,，.。]', '', t).lower()
     return re.sub(r'(第\d+(期|クール|シーズン)|\d+(st|nd|rd|th)season|season\d+|part\d+|\d+)+$', '', t)
 
+def nl_clean(t):
+    """나무위키 문서 제목 정리: 넘겨주기 꼬리(「유루캠△?from=ゆるキャン△」의 「?from=…」)를 뗌"""
+    return re.split(r'\?', t or '', 1)[0].strip() or None
+
+def nl_shared(bases):
+    """한 나무위키 문서에 이어진 작품 원제들 중, 서로 포함 관계가 아닌(같은 시리즈가 아닌) 것이 있으면 True"""
+    L = [x for x in bases if x]
+    return any(not (a in b or b in a) for i, a in enumerate(L) for b in L[i + 1:])
+
 def tmdb_title_ok(w, tm):
     """TMDB 한국어 제목. TMDB는 한 시리즈를 한 작품으로 묶고 시즌으로 나누는 경우가 많아(「바케모노가타리」 안에 「오프&몬스터 시즌」이 6시즌으로 들어 있음),
     2시즌 이후로 이어 붙인 작품은 TMDB 원제가 이 작품 원제와 이어질 때만 TMDB 한국어 제목을 씀."""
@@ -307,6 +316,11 @@ def main():
     for _o, _n in _al.items(): OLD[_n].append(_o)
     try: OVR = {k_: v for k_, v in json.load(open(os.path.join(ROOT, 'overrides.json'), encoding='utf-8')).items() if not k_.startswith('_')}
     except FileNotFoundError: OVR = {}
+    # 나무위키 실시간 문서 제목별로 이어진 작품(원제 기준) 모음: 한 문서가 여러 작품에 쓰였는지 보려고
+    NLUSE = collections.defaultdict(set)
+    for _w in W:
+        _r = load('namu_live', _w['k']) or {}
+        if nl_clean(_r.get('ko')): NLUSE[nl_clean(_r.get('ko'))].add(_base_n(_w.get('ja')))
     LAF = laftel_index()
     BYQ = collections.defaultdict(list)
     for _w in W: BYQ[(_w.get('y'), _w.get('q'))].append(_w)
@@ -357,8 +371,13 @@ def main():
         ko = None
         _lfs = laftel_by_studio(w, LAF, BYQ) if not w.get('ko') else None
         w['_lfs'] = _lfs
-        for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('namulive', (ld('namu_live') or {}).get('ko')), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
-            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb', 'namulive') or _related_ok(_t)): ko = clean_ko(_t); break      # 상세 화면 「한국어」 줄에도 정리된 제목이 들어가게
+        # 나무위키 실시간: 한글이 들어 있고, 원제의 일부 글자(「描くなるうえは」의 「描」 문서)가 아닐 때만
+        _nl0 = ld('namu_live') or {}
+        _nlk = nl_clean(_nl0.get('ko'))
+        # 여러 작품이 같은 문서로 이어졌으면(「아가루아니메」 같은 배급·목록 문서) 작품 문서가 아니라고 보고 버림
+        _nl_ko = _nlk if _nlk and re.search(r'[가-힣]', _nlk) and _nlk not in (w.get('ja') or '') and not nl_shared(NLUSE.get(_nlk, ())) else None
+        for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('namulive', _nl_ko), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
+            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
         if (OVR.get(k) or {}).get('ko'): ko = OVR[k]['ko']                  # 직접 정한 값이 가장 우선 (overrides.json)
         if ko: w['ko'] = ko
@@ -371,7 +390,7 @@ def main():
         work_names = [x for x in (ko, w.get('ja')) if x]
         cur_work[0] = (w.get('ja'), ko)
         _nl = ld('namu_live') or {}
-        if _nl.get('url'): d['namu'] = _nl['url']                    # 외부 링크 「나무위키」 (집 PC가 실제 문서를 열어 원제를 확인한 것)
+        if _nl.get('url') and _nl_ko and ko and (ko == _nl_ko or ko.startswith(_nl_ko)): d['namu'] = _nl['url'].split('?')[0]      # 외부 링크 「나무위키」: 제목 확인을 통과해 실제로 쓰인 문서만
         if al:
             stmap = {'FINISHED': 'F', 'RELEASING': 'O', 'NOT_YET_RELEASED': 'U', 'CANCELLED': 'C', 'HIATUS': 'H'}
             if al.get('status') in stmap: w['st'] = stmap[al['status']]
