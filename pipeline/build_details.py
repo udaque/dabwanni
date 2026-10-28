@@ -660,6 +660,19 @@ def main():
         if _w.get('ko') and _w.get('_kosrc') not in (None, 'cat', 'tmdb') and any(not (x in _base_n(_w.get('ja')) or _base_n(_w.get('ja')) in x) for x in _sure.get(SEASON_STRIP(_w['ko']), ())):
             _w['ko'] = None; _w.pop('_lfs', None)
             if _w['k'] in details: details[_w['k']].get('titles', {}).pop('ko', None)
+    # 보조 출처 제목끼리도: 원제가 서로 이어지지 않는 여러 작품에 같은 제목이 붙었으면, 원제가 가장 짧은(대개 본편) 작품과 이어지는 것만 남김
+    # (「ムーミン谷の彗星」 극장판에 본편 문서 제목 「즐거운 무민 일가」가 붙던 문제)
+    _weak = collections.defaultdict(list)
+    for _w in W:
+        if _w.get('ko') and _w.get('_kosrc') not in (None, 'cat', 'tmdb'): _weak[SEASON_STRIP(_w['ko'])].append(_w)
+    for _t, _L in _weak.items():
+        if len(_L) < 2: continue
+        _anchor = min((_base_n(x.get('ja')) for x in _L), key=len)
+        for _w in _L:
+            _b = _base_n(_w.get('ja'))
+            if _anchor and not (_anchor in _b or _b in _anchor):
+                _w['ko'] = None
+                if _w['k'] in details: details[_w['k']].get('titles', {}).pop('ko', None)
     n_inh = 0
     for r in c['rows']:
         w = BY[r[0]]
