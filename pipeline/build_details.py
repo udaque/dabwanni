@@ -654,7 +654,8 @@ def main():
             if rr.get('type') == 'PREQUEL':
                 # 원제가 이어지는 이전 시즌만 (「物語シリーズ セカンドシーズン」이 이전 작품 「偽物語」의 한국어 제목을 받지 않게)
                 pj, mj = _base_n((BY.get(rr['k']) or {}).get('ja')), _base_n(w.get('ja'))
-                if not (pj and mj and (pj in mj or mj in pj)): continue
+                pr, mr = _base_n((BY.get(rr['k']) or {}).get('r')), _base_n(w.get('r'))      # 원제 표기가 다르면(「サカモトデイズ」와 「SAKAMOTO DAYS」) 로마자 제목으로도 봄
+                if not ((pj and mj and (pj in mj or mj in pj)) or (pr and mr and len(pr) >= 4 and (pr in mr or mr in pr))): continue
                 pk = inherit_ko(rr['k'], depth + 1)
                 if pk: return pk
         return None
