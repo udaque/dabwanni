@@ -97,7 +97,7 @@ def main():
                     u, text = open_doc(title)
                     t = urllib.parse.unquote(u.split('/w/', 1)[1].split('#')[0].split('?')[0]) if u else ''      # 넘겨주기 꼬리 「?from=…」 뗌
                     head = (t, t.split('/')[0])
-                    if u and jb and jb in norm((text or '')[:1000]) and re.search(r'[가-힣]', head[1]) and head[1] not in w['ja']:   # 앞부분 1,000자 안에 원제, 한글 제목, 원제의 일부 글자 문서 아님
+                    if u and jb and jb in norm((text or '')[:1000]) and re.search(r'[가-힣]', head[1]) and head[1] not in w['ja'] and not re.search(r'\((드라마|소설|만화|게임|실사|영화|뮤지컬|라이트 노벨|웹툰|음반|노래|인물|성우|가수|배우)', head[1]) and '출생' not in (text or '')[:800]:   # 앞부분 1,000자 안에 원제, 한글 제목, 원제의 일부 글자 문서 아님
                         rec.update(url='https://namu.wiki/w/' + urllib.parse.quote(t), title=t, ko=t.split('/')[0]); return True
                     return False
                 ok = any(check(t) for t in cands)

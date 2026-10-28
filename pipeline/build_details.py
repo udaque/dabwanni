@@ -372,7 +372,8 @@ def main():
         def _digits_ok(t):
             dj, dk = set(re.findall(r'\d+', unicodedata.normalize('NFKC', re.sub(r'[\(（](19|20)\d\d[\)）]', '', w.get('ja') or '')))), set(re.findall(r'\d+', t or ''))
             return not (dj and dk) or bool(dj & dk)                       # 「第5話」에 「제3화」 같은 다른 편 제목이 붙지 않게
-        _rel_ko = [BY[r_]['ko'] for r_ in ['a' + str(e['node']['id']) for e in ((al or {}).get('relations') or {}).get('edges', [])] if r_ in BY and BY[r_].get('ko')]
+        # 관련 작품의 한국어 제목: 처리 순서와 상관없이 쓰려고, 아직 처리 전인 작품은 작품 목록·TMDB 제목으로 봄 (SAKAMOTO DAYS 2기에 인물 문서 제목이 붙던 문제)
+        _rel_ko = [x for x in (BY[r_].get('ko') or tmdb_title_ok(BY[r_], load('tmdb', r_)) for r_ in ['a' + str(e['node']['id']) for e in ((al or {}).get('relations') or {}).get('edges', [])] if r_ in BY) if x]
         def _related_ok(t):
             # 나무위키·Wikidata 제목은 관련 작품 한국어 제목과 두 글자 이상 겹쳐야 씀 (약사의 혼잣말 극장판에 「히어로 문고」가 붙던 문제)
             if not _rel_ko: return True
@@ -385,7 +386,9 @@ def main():
         _nl0 = ld('namu_live') or {}
         _nlk = nl_clean(_nl0.get('ko'))
         # 여러 작품이 같은 문서로 이어졌으면(「아가루아니메」 같은 배급·목록 문서) 작품 문서가 아니라고 보고 버림
-        _nl_ko = _nlk if _nlk and re.search(r'[가-힣]', _nlk) and _nlk not in (w.get('ja') or '') and not nl_shared(NLUSE.get(_nlk, ())) else None
+        _nlk = re.sub(r'\s*\(애니메이션\)\s*$', '', _nlk or '') or None
+        # 「약사의 혼잣말(드라마)」처럼 다른 매체를 가리키는 문서는 버림
+        _nl_ko = _nlk if _nlk and re.search(r'[가-힣]', _nlk) and _nlk not in (w.get('ja') or '') and not nl_shared(NLUSE.get(_nlk, ())) and not re.search(r'\((드라마|소설|만화|게임|실사|영화|뮤지컬|라이트 노벨|웹툰|음반|노래|인물|성우|가수|배우)', _nlk) else None
         for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('namulive', _nl_ko), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
             if _t and _digits_ok(_t) and not edu_title(_t, w) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); w['_kosrc'] = _src; break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
@@ -664,6 +667,13 @@ def main():
         if _w.get('ko') and _w.get('_kosrc') not in (None, 'cat', 'tmdb') and any(not (x in _base_n(_w.get('ja')) or _base_n(_w.get('ja')) in x) for x in _sure.get(SEASON_STRIP(_w['ko']), ())):
             _w['ko'] = None; _w.pop('_lfs', None)
             if _w['k'] in details: details[_w['k']].get('titles', {}).pop('ko', None)
+    # 나무위키 실시간 제목이 그 작품 스태프·성우의 한국어 이름과 같으면 인물 문서를 잘못 이은 것이라 버림 (「와타나베 케이스케」)
+    for _w in W:
+        if _w.get('_kosrc') != 'namulive' or _w['k'] not in details: continue
+        _d = details[_w['k']]
+        _names = {p.get('ko') for s in _d.get('staff') or [] for p in s.get('people') or []} | {v.get('ko') for c in _d.get('characters') or [] for v in c.get('cast') or []}
+        if SEASON_STRIP(_w['ko']) in _names:
+            _w['ko'] = None; _d.get('titles', {}).pop('ko', None); _d.pop('namu', None)
     # 보조 출처 제목끼리도: 원제가 서로 이어지지 않는 여러 작품에 같은 제목이 붙었으면, 원제가 가장 짧은(대개 본편) 작품과 이어지는 것만 남김
     # (「ムーミン谷の彗星」 극장판에 본편 문서 제목 「즐거운 무민 일가」가 붙던 문제)
     _weak = collections.defaultdict(list)
