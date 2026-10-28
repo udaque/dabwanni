@@ -35,6 +35,8 @@ def _base_n(t):
     t = re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？、,，.。]', '', t).lower()
     return re.sub(r'(第\d+(期|クール|シーズン)|\d+(st|nd|rd|th)season|season\d+|part\d+|\d+)+$', '', t)
 
+def SEASON_STRIP(t): return re.sub(r'\s*(\d+\s*기|\d+\s*쿨|시즌\s*\d+|파트\s*\d+)(\s*\d+\s*쿨)?\s*$', '', t or '').strip()
+
 def nl_clean(t):
     """나무위키 문서 제목 정리: 넘겨주기 꼬리(「유루캠△?from=ゆるキャン△」의 「?from=…」)를 뗌"""
     return re.split(r'\?', t or '', 1)[0].strip() or None
@@ -377,7 +379,7 @@ def main():
         # 여러 작품이 같은 문서로 이어졌으면(「아가루아니메」 같은 배급·목록 문서) 작품 문서가 아니라고 보고 버림
         _nl_ko = _nlk if _nlk and re.search(r'[가-힣]', _nlk) and _nlk not in (w.get('ja') or '') and not nl_shared(NLUSE.get(_nlk, ())) else None
         for _src, _t in (('cat', w.get('ko')), ('tmdb', tmdb_title_ok(w, tm)), ('namulive', _nl_ko), ('kowiki', (lambda d: d.get('title') if d.get('v') == 2 else None)(ld('kowiki') or {})), ('laftel', (_lfs or (None,))[0]), ('wd', (wdw or {}).get('ko')), ('namu', NM.namu_one(w.get('ja'), works=True))):
-            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
+            if _t and _digits_ok(_t) and (_src in ('cat', 'tmdb') or _related_ok(_t)): ko = clean_ko(_t); w['_kosrc'] = _src; break      # 정리된 제목. 나무위키 실시간도 관련 작품 제목과 겹쳐야 씀 (단다단 3기에 「사변상등」이 붙던 문제)
         if ko: ko = add_season_code(add_arc(ko, w.get('ja')), season_code(_nat or w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre')))
         if (OVR.get(k) or {}).get('ko'): ko = OVR[k]['ko']                  # 직접 정한 값이 가장 우선 (overrides.json)
         if ko: w['ko'] = ko
@@ -390,7 +392,7 @@ def main():
         work_names = [x for x in (ko, w.get('ja')) if x]
         cur_work[0] = (w.get('ja'), ko)
         _nl = ld('namu_live') or {}
-        if _nl.get('url') and _nl_ko and ko and (ko == _nl_ko or ko.startswith(_nl_ko)): d['namu'] = _nl['url'].split('?')[0]      # 외부 링크 「나무위키」: 제목 확인을 통과해 실제로 쓰인 문서만
+        if _nl.get('url') and _nl_ko and ko and (ko == _nl_ko or ko.startswith(_nl_ko)): d['namu'] = re.split(r'\?|%3F|%3f', _nl['url'])[0]      # 외부 링크 「나무위키」: 제목 확인을 통과해 실제로 쓰인 문서만
         if al:
             stmap = {'FINISHED': 'F', 'RELEASING': 'O', 'NOT_YET_RELEASED': 'U', 'CANCELLED': 'C', 'HIATUS': 'H'}
             if al.get('status') in stmap: w['st'] = stmap[al['status']]
@@ -645,6 +647,15 @@ def main():
                 pk = inherit_ko(rr['k'], depth + 1)
                 if pk: return pk
         return None
+    # 라프텔·위키백과·나무위키 등으로 붙은 제목이, 원제가 다른 작품의 확실한 제목(작품 목록·TMDB)과 같으면 그 작품 것을 잘못 가져온 것이라 버림
+    # (헤타리아 2026에 같은 분기·같은 제작사의 「彼方から」(바람의 저편)가 붙던 문제)
+    _sure = {}
+    for _w in W:
+        if _w.get('ko') and _w.get('_kosrc') in ('cat', 'tmdb'): _sure.setdefault(SEASON_STRIP(_w['ko']), set()).add(_base_n(_w.get('ja')))
+    for _w in W:
+        if _w.get('ko') and _w.get('_kosrc') not in (None, 'cat', 'tmdb') and any(not (x in _base_n(_w.get('ja')) or _base_n(_w.get('ja')) in x) for x in _sure.get(SEASON_STRIP(_w['ko']), ())):
+            _w['ko'] = None; _w.pop('_lfs', None)
+            if _w['k'] in details: details[_w['k']].get('titles', {}).pop('ko', None)
     n_inh = 0
     for r in c['rows']:
         w = BY[r[0]]
