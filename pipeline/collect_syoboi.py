@@ -62,7 +62,7 @@ def programs(http, tid, chmap):
     P = []
     for p in x.iter('ProgItem'):
         st = p.findtext('StTime')
-        if not st or p.findtext('Deleted') == '1': continue
+        if not st or st.startswith('0000') or p.findtext('Deleted') == '1': continue      # 「0000-00-00」 같은 빈 날짜는 건너뜀
         P.append({'ch': p.findtext('ChID'), 'st': datetime.strptime(st, '%Y-%m-%d %H:%M:%S'),
                   'count': p.findtext('Count'), 'flag': int(p.findtext('Flag') or 0), 'cmt': p.findtext('ProgComment') or ''})
     P.sort(key=lambda p: p['st'])
@@ -103,7 +103,7 @@ def lookup_title(http, tid):
 
 if __name__ == '__main__':
     import argparse
-    ap = argparse.ArgumentParser(); ap.add_argument('--interval', type=float, default=1.5); budget_arg(ap); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument('--interval', type=float, default=4.0); budget_arg(ap); a = ap.parse_args()      # 간격 1.5초는 429(요청 제한)에 걸려 4초로
     http = Http(a.interval)
     W = [w for w in load_catalog() if w.get('sy')]
     chmap = {}

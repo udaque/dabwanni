@@ -9,7 +9,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(ROOT, '..', 'site')
 RAW = os.path.join(ROOT, 'raw')
 LOGS = os.path.join(ROOT, 'logs')
-UA = 'dabwanni-collector/1.0 (personal non-commercial anime database; https://github.com/)'
+UA = 'dabwanni/1.0 (personal anime database; https://dabwanni.pages.dev)'      # 「collector」가 든 머리말은 애니메테마즈(Cloudflare)가 520으로 막음
 
 class SourceError(Exception):
     """출처 자체의 문제(주소 변경, 차단, 서버 다운, 형식 변경). 개별 작품 문제와 구분."""
@@ -101,7 +101,9 @@ class Http:
                 last_err = f'{e.code} {snippet[:120]}'
                 if e.code == 429 or e.code >= 500:
                     ra = e.headers.get('Retry-After')
-                    time.sleep(min(int(ra) + 1 if ra and ra.isdigit() else 10 * (i + 1), 120)); continue
+                    # 429(요청 제한)는 길게 쉼: 쇼보이는 짧게 다시 두드리면 제한이 더 길어짐
+                    base = 60 * (i + 1) if e.code == 429 else 10 * (i + 1)
+                    time.sleep(min(int(ra) + 1 if ra and ra.isdigit() else base, 300)); continue
                 raise SourceDown(f'{e.code} {url} {snippet[:120]}')
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 last_err = repr(e)
