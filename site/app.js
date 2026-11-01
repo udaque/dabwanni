@@ -461,10 +461,14 @@ function renderStats(){
       <div class="row3"><span class="k">${t('본 화수')}</span><span class="v">${fmtN(eps)}<small>${S.lang === 'en' ? ' eps' : S.lang === 'ja' ? '話' : '화'}</small></span></div>
       <div class="row3"><span class="k">${t('본 시간')}</span><span class="v">${fmtDHM(min)}</span></div></div></div>`;
   P.watch += h + logHTML(); h = '';
+  // 봤음인데 별점을 아직 안 준 작품 (길면 상자 안에서 넘겨 봄)
+  const unrated = L.filter(([, m]) => m.w && !m.rate).sort((p, q) => title(p[0]).localeCompare(title(q[0])));
+  const unratedBox = unrated.length ? `<div class="stbox"><h2>${t('아직 별점 안 준 작품')}<span class="pill">${fmtN(unrated.length)}</span></h2><div class="rows scrollbox">${unrated.map(([w]) =>
+    `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars"><i>★★★★★</i></span></div>`).join('')}</div></div>` : '';
   if (ratedL.length) h += `<div class="stbox"><h2>${t('별점')}<span class="pill">${t('평균')} ${avgRate.toFixed(1)}</span></h2><div class="hbars">${rates.map((n, i) => drill(hbarRow('★'.repeat(i + 1), [['g', n]], Math.max(1, ...rates), n), ratedL.filter(([, m]) => m.rate === i + 1).map(([w, m]) => ({w, m})))).reverse().join('')}</div></div>
-    <div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || title(p[0]).localeCompare(title(q[0]))).map(([w, m]) =>
+    ${unratedBox}<div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || title(p[0]).localeCompare(title(q[0]))).map(([w, m]) =>
       `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars">${'★'.repeat(m.rate)}<i>${'★'.repeat(5 - m.rate)}</i></span></div>`).join('')}</div></div>`;
-  P.rate += h || `<div class="stbox"><p class="stempty">${t('아직 별점을 준 작품이 없습니다.')}</p></div>`; h = '';
+  P.rate += h || (unratedBox + `<div class="stbox"><p class="stempty">${t('아직 별점을 준 작품이 없습니다.')}</p></div>`); h = '';
   h += `<div class="stbox"><h2>${t('방영 시기별')}</h2>
       <div class="stseg" id="stBy"><button data-by="q" class="${statsBy === 'q' ? 'on' : ''}">${t('분기별')}</button><button data-by="y" class="${statsBy === 'y' ? 'on' : ''}">${t('연도별')}</button></div>
       <div class="legend3"><span><i class="dot w"></i>${t('봤음')}</span><span><i class="dot g"></i>${t('보는 중')}</span><span><i class="dot i"></i>${t('관심만')}</span></div>
@@ -485,6 +489,7 @@ function renderStats(){
   $('#stats').innerHTML = `<div class="stsub" role="tablist">${SUB.map(([v, l]) => `<button role="tab" data-sub="${v}" aria-selected="${statSub === v}" class="${statSub === v ? 'on' : ''}">${t(l)}</button>`).join('')}</div>` + P[statSub];
   $('#stats').querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { statSub = b.dataset.sub; store.set('statSub', statSub); renderStats(); });
   if (statSub === 'watch') bindLog();
+  $('#stats').querySelectorAll('.scrollbox').forEach(el => { const f = () => el.classList.toggle('fadebot', el.scrollTop + el.clientHeight < el.scrollHeight - 2); el.onscroll = f; f(); });      // 아래에 더 있을 때만 흐림
   if ($('#stScope')) $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
   if (statSub === 'stats') peopleStats(B, ++statsTok);
   if ($('#stBy')) $('#stBy').onclick = e => { const b = e.target.closest('[data-by]'); if (!b) return; statsBy = b.dataset.by; renderStats(); };

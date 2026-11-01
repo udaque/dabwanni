@@ -342,3 +342,7 @@ html{touch-action:manipulation}
 .fscroll.fr{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
 .fscroll.fl{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px);mask-image:linear-gradient(90deg,transparent,#000 28px)}
 .fscroll.fl.fr{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+
+/* 아직 별점 안 준 작품: 최대 높이 안에서 넘겨 보기 */
+.rows.scrollbox{max-height:320px;overflow-y:auto;overscroll-behavior:contain}
+.rows.scrollbox.fadebot{-webkit-mask-image:linear-gradient(#000 calc(100% - 28px),transparent);mask-image:linear-gradient(#000 calc(100% - 28px),transparent)}
