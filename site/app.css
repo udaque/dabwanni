@@ -326,3 +326,9 @@ html{touch-action:manipulation}
 .ebtns{display:flex;gap:8px}.ebtns button{flex:1;height:44px;border-radius:10px;font-weight:700;font-size:15px;white-space:nowrap}
 .ecancel{border:1px solid var(--line);background:var(--bg);color:var(--ink)}.esave{border:0;background:var(--ink);color:var(--surface)}
 .emsg{color:var(--onair);font-size:14px;margin:10px 0 0}
+
+/* 기록 탭 안의 세부 탭 */
+.stsub{display:flex;gap:6px;overflow-x:auto;margin:0 0 14px;scrollbar-width:none}
+.stsub::-webkit-scrollbar{display:none}
+.stsub button{flex:1 1 0;min-width:max-content;height:38px;padding:0 8px;border:1px solid var(--line);border-radius:19px;background:var(--bg);color:var(--sub);font-size:14px;font-weight:700;white-space:nowrap}
+.stsub button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}

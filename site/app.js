@@ -342,7 +342,7 @@ function fmtDHM(min){
 // 막대: 채운 부분 전체를 둥근 끝으로 감싸고 그 안을 상태별 색으로 나눔 (색이 여럿이어도 오른쪽 끝이 둥글게)
 const hbarRow = (label, parts, max, total) => { const sum = parts.reduce((s, [, n]) => s + n, 0) || 1;
   return `<span class="lab">${label}</span><span class="bar"><span class="fill" style="width:${(sum / max * 100).toFixed(2)}%">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / sum * 100).toFixed(2)}%"></i>` : '').join('')}</span></span><span class="num">${typeof total === 'string' ? total : fmtN(total)}</span>`; };
-let statsBy = 'q', statsTok = 0, dropN = 0;
+let statsBy = 'q', statsTok = 0, dropN = 0, statSub = store.get('statSub', 'all');      // 기록 탭 안의 세부 탭: all 전체 기록 · watch 시청 기록 · rate 별점 기록 · stats 통계
 // 달력: 날마다 본 화수, 날짜를 누르면 그날 본 작품·회차 (지우기 가능)
 let calY = null, calM = null, calSel = null, logBy = store.get('logBy', 'ep');      // 화수 기준 / 시청 시간 기준
 const WD = () => S.lang === 'ja' ? ['日', '月', '火', '水', '木', '金', '土'] : S.lang === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['일', '월', '화', '수', '목', '금', '토'];
@@ -409,7 +409,6 @@ function renderStats(){
   for (const [k, m] of Object.entries(marks)) { const w = BYK.get(k); if (w && (m.w || m.i || m.ep || m.rate)) L.push([w, m]); }
   const watched = L.filter(([, m]) => m.w), watching = L.filter(([, m]) => m.ep && !m.w), want = L.filter(([, m]) => m.i || m.w || m.ep);
   if (!L.length && !wlog.length) { $('#stats').innerHTML = `<div class="stbox"><p class="stempty">${t('아직 기록이 없습니다.')}</p></div>`; return; }
-  if (!L.length) { $('#stats').innerHTML = logHTML(); bindLog(); return; }
 
   // 본 화수·시간 (다시 본 횟수 포함, 1화 길이를 모르면 형식별 어림값)
   let eps = 0, min = 0;
@@ -452,21 +451,26 @@ function renderStats(){
 
   const one = (title_, rows) => { if (!rows.length) return ''; const mx = Math.max(1, ...rows.map(x => x[1].n));
     return `<div class="stbox"><h2>${title_}</h2><div class="hbars">${rows.map(([k, o]) => drill(hbarRow(esc(k), [['w', o.w], ['g', o.g], ['i', o.i]], mx, o.n), o.items)).join('')}</div></div>`; };
+  const P = {all: '', watch: '', rate: '', stats: ''};
   let h = `<div class="stbox"><h2>${t('내 기록')}</h2><div class="kpis">
       <div class="kpi"><div class="lb"><span class="dot w"></span>${t('봤음')}</div><div class="v">${fmtN(watched.length)}</div></div>
       <div class="kpi"><div class="lb"><span class="dot g"></span>${t('보는 중')}</div><div class="v">${fmtN(watching.length)}</div></div>
       <div class="kpi"><div class="lb"><span class="dot i"></span>${t('관심')}</div><div class="v">${fmtN(want.length)}</div></div></div></div>`;
+  P.all += h; h = '';
   h += `<div class="stbox"><h2>${t('본 양')}</h2><div class="big3">
       <div class="row3"><span class="k">${t('본 화수')}</span><span class="v">${fmtN(eps)}<small>${S.lang === 'en' ? ' eps' : S.lang === 'ja' ? '話' : '화'}</small></span></div>
       <div class="row3"><span class="k">${t('본 시간')}</span><span class="v">${fmtDHM(min)}</span></div></div></div>`;
+  P.watch += h + logHTML(); h = '';
   if (ratedL.length) h += `<div class="stbox"><h2>${t('별점')}<span class="pill">${t('평균')} ${avgRate.toFixed(1)}</span></h2><div class="hbars">${rates.map((n, i) => drill(hbarRow('★'.repeat(i + 1), [['g', n]], Math.max(1, ...rates), n), ratedL.filter(([, m]) => m.rate === i + 1).map(([w, m]) => ({w, m})))).reverse().join('')}</div></div>
     <div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || title(p[0]).localeCompare(title(q[0]))).map(([w, m]) =>
       `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars">${'★'.repeat(m.rate)}<i>${'★'.repeat(5 - m.rate)}</i></span></div>`).join('')}</div></div>`;
+  P.rate += h || `<div class="stbox"><p class="stempty">${t('아직 별점을 준 작품이 없습니다.')}</p></div>`; h = '';
   h += `<div class="stbox"><h2>${t('방영 시기별')}</h2>
       <div class="stseg" id="stBy"><button data-by="q" class="${statsBy === 'q' ? 'on' : ''}">${t('분기별')}</button><button data-by="y" class="${statsBy === 'y' ? 'on' : ''}">${t('연도별')}</button></div>
       <div class="legend3"><span><i class="dot w"></i>${t('봤음')}</span><span><i class="dot g"></i>${t('보는 중')}</span><span><i class="dot i"></i>${t('관심만')}</span></div>
       <div class="hbars tight">${G.map(([k, g]) => drill(hbarRow(esc(k), [['w', g.w], ['g', g.g], ['i', g.i]], gmax, g.w + g.g + g.i), g.items)).join('')}</div></div>`;
   if (avgProg != null) h += `<div class="stbox"><h2>${t('보는 중 진행률')}<span class="pill">${t('평균')} ${Math.round(avgProg * 100)}%</span></h2><div class="hbars">${watching.filter(([w]) => total(w)).sort((p, q) => q[1].ep / total(q[0]) - p[1].ep / total(p[0])).slice(0, 8).map(([w, m]) => hbarRow(esc(short(title(w))), [['g', m.ep]], total(w), m.ep).replace(`<span class="num">${fmtN(m.ep)}</span>`, `<span class="num">${m.ep}/${total(w)}</span>`)).join('')}</div></div>`;
+  P.all += h; h = '';
   h += `<div class="stscope" id="stScope"><span class="stbase"><i class="dot w"></i>${t('봤음')}</span>
       <button data-sc="g" class="${SCOPE.g ? 'on' : ''}"><i class="dot g"></i>${t('보는 중')}</button>
       <button data-sc="i" class="${SCOPE.i ? 'on' : ''}"><i class="dot i"></i>${t('관심만')}</button><span class="pill">${fmtN(B.length)}</span></div>`;
@@ -475,11 +479,15 @@ function renderStats(){
   h += one(t('많이 본 장르·태그'), byTag);
   h += one(t('많이 본 제작사'), byStudio);
   h += `<div id="stPeople">${B.length ? `<div class="stbox"><p class="stempty">${t('불러오는 중')}</p></div>` : ''}</div>`;
-  $('#stats').innerHTML = logHTML() + h;
-  bindLog();
-  $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
-  peopleStats(B, ++statsTok);
-  $('#stBy').onclick = e => { const b = e.target.closest('[data-by]'); if (!b) return; statsBy = b.dataset.by; renderStats(); };
+  P.stats += h;
+  const SUB = [['all', '전체 기록'], ['watch', '시청 기록'], ['rate', '별점 기록'], ['stats', '통계']];
+  if (!P[statSub]) statSub = 'all';
+  $('#stats').innerHTML = `<div class="stsub" role="tablist">${SUB.map(([v, l]) => `<button role="tab" data-sub="${v}" aria-selected="${statSub === v}" class="${statSub === v ? 'on' : ''}">${t(l)}</button>`).join('')}</div>` + P[statSub];
+  $('#stats').querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { statSub = b.dataset.sub; store.set('statSub', statSub); renderStats(); });
+  if (statSub === 'watch') bindLog();
+  if ($('#stScope')) $('#stScope').onclick = e => { const b = e.target.closest('[data-sc]'); if (!b) return; SCOPE[b.dataset.sc] = !SCOPE[b.dataset.sc]; store.set('statsScope', SCOPE); renderStats(); };
+  if (statSub === 'stats') peopleStats(B, ++statsTok);
+  if ($('#stBy')) $('#stBy').onclick = e => { const b = e.target.closest('[data-by]'); if (!b) return; statsBy = b.dataset.by; renderStats(); };
   $('#stats').onclick = e => {
     const b = e.target.closest('[data-tog]'); if (!b) return;
     const L = $('#stats').querySelector(`[data-list="${b.dataset.tog}"]`); if (L) L.hidden = !L.hidden;
