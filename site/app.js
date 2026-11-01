@@ -73,6 +73,14 @@ function seasonTags(w){
   if (m === 'f') out.push(L === 'ja' ? 'ファイナル' : L === 'en' ? 'Final' : '파이널');
   return out.map(x => ` <span class="stag">${x}</span>`).join('');
 }
+function tcmp(a, b){
+  const ta = title(a), tb = title(b);
+  if (S.lang === 'ko') {
+    const g = s => /^[가-힣ㄱ-ㅎ]/.test(s) ? 0 : /^[\u3040-\u30ff\u3400-\u9fff々〆ヵヶ]/.test(s) ? 2 : 1;      // 한글 0 · 영문·숫자 등 1 · 한자·가나 2
+    const d = g(ta) - g(tb); if (d) return d;
+  }
+  return ta.localeCompare(tb, S.lang === 'ko' ? 'ko' : S.lang);
+}
 const titleHTML = w => w.tko && S.lang === 'ko' ? esc(w.tko) : esc(bareTitle(title(w), w)) + seasonTags(w);      // 직접 정한 메인 타이틀은 적은 그대로
 function subtitle(w){ const tt = title(w); return (S.lang === 'ko' ? [w.ja, w.en, w.r] : S.lang === 'ja' ? [w.en, w.r, w.ko] : [w.ja, w.r, w.ko]).find(x => x && x !== tt) || ''; }
 // 큰 키 비주얼(MAL의 「l」 판)이 없으면 보통 크기로, 그것도 없으면 빈 자리로
@@ -465,11 +473,11 @@ function renderStats(){
       <div class="row3"><span class="k">${t('본 시간')}</span><span class="v">${fmtDHM(min)}</span></div></div></div>`;
   P.watch += h + logHTML(); h = '';
   // 봤음인데 별점을 아직 안 준 작품 (길면 상자 안에서 넘겨 봄)
-  const unrated = L.filter(([, m]) => m.w && !m.rate).sort((p, q) => title(p[0]).localeCompare(title(q[0])));
+  const unrated = L.filter(([, m]) => m.w && !m.rate).sort((p, q) => tcmp(p[0], q[0]));
   const unratedBox = unrated.length ? `<div class="stbox"><h2>${t('아직 별점 안 준 작품')}<span class="pill">${fmtN(unrated.length)}</span></h2><div class="rows scrollbox">${unrated.map(([w]) =>
     `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars"><i>★★★★★</i></span></div>`).join('')}</div></div>` : '';
   if (ratedL.length) h += `<div class="stbox"><h2>${t('별점')}<span class="pill">${t('평균')} ${avgRate.toFixed(1)}</span></h2><div class="hbars">${rates.map((n, i) => drill(hbarRow('★'.repeat(i + 1), [['g', n]], Math.max(1, ...rates), n), ratedL.filter(([, m]) => m.rate === i + 1).map(([w, m]) => ({w, m})))).reverse().join('')}</div></div>
-    ${unratedBox}<div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || title(p[0]).localeCompare(title(q[0]))).map(([w, m]) =>
+    ${unratedBox}<div class="stbox"><h2>${t('별점 준 작품')}<span class="pill">${fmtN(ratedL.length)}</span></h2><div class="rows">${ratedL.sort((p, q) => q[1].rate - p[1].rate || tcmp(p[0], q[0])).map(([w, m]) =>
       `<div class="row"><div class="grow"><button class="link" data-act="open" data-k="${esc(w.k)}">${titleHTML(w)}</button></div><span class="rstars">${'★'.repeat(m.rate)}<i>${'★'.repeat(5 - m.rate)}</i></span></div>`).join('')}</div></div>`;
   P.rate += h || (unratedBox + `<div class="stbox"><p class="stempty">${t('아직 별점을 준 작품이 없습니다.')}</p></div>`); h = '';
   h += `<div class="stbox"><h2>${t('방영 시기별')}</h2>
@@ -669,11 +677,11 @@ function render(){
   let html = S.q ? idxResults(S.q, 'people', t('인물'), 'person', 'p') + idxResults(S.q, 'studios', t('제작사'), 'studio', 's') : '';
   const hasIdx = html !== '';
   if (seasonMode) {
-    TYPE_ORDER.forEach(ty => { const arr = L.filter(w => w.ty === ty).sort((a, b) => title(a).localeCompare(title(b), S.lang)); if (arr.length) html += group(t(TYPE[ty]), arr, arr.length); });
+    TYPE_ORDER.forEach(ty => { const arr = L.filter(w => w.ty === ty).sort(tcmp); if (arr.length) html += group(t(TYPE[ty]), arr, arr.length); });
     if (!L.length) html += `<p class="empty">${t('이 분기에 해당하는 작품이 없습니다. 위의 화살표로 다른 분기를 보세요.')}</p>`;
     $('#more').innerHTML = '';
   } else {
-    L = L.slice().sort((a, b) => (b.y || 0) - (a.y || 0) || (b.q || 0) - (a.q || 0) || title(a).localeCompare(title(b), 'ko'));
+    L = L.slice().sort((a, b) => (b.y || 0) - (a.y || 0) || (b.q || 0) - (a.q || 0) || tcmp(a, b));
     const gk = w => w.y ? (w.q ? `${F('year', w.y)} ${F('quarter', w.q)}` : F('year', w.y)) : t('연도 미상');
     const full = {}; L.forEach(w => full[gk(w)] = (full[gk(w)] || 0) + 1);
     const by = new Map(); L.slice(0, S.shown).forEach(w => { if (!by.has(gk(w))) by.set(gk(w), []); by.get(gk(w)).push(w); });
