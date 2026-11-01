@@ -284,13 +284,13 @@ html{touch-action:manipulation}
 .calnav{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
 .calnav b{font-size:16px}
 .calnav button{width:36px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:18px}
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center}
 .cwd{font-size:12px;color:var(--sub);padding:2px 0}.cwd.sun{color:var(--onair)}.cwd.sat{color:#5b8def}
 .cday{position:relative;aspect-ratio:1/1;border:0;border-radius:10px;background:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0;font-size:13px}
 .cday.has{color:var(--ink);background:var(--chip)}
 .cday.today .dn{font-weight:800;color:var(--ink);text-decoration:underline}
 .cday.sel{outline:2px solid var(--ink)}
-.cday .cn{min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--onair);color:#fff;font-size:12px;font-weight:700;line-height:20px}
+.cday .cn{min-width:20px;max-width:100%;height:20px;padding:0 4px;border-radius:10px;background:var(--onair);color:#fff;font-size:12px;font-weight:700;line-height:20px;white-space:nowrap;letter-spacing:-.3px}
 .calday{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .calday h3{margin:0 0 6px;font-size:15px}
 .lrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
@@ -310,3 +310,5 @@ html{touch-action:manipulation}
 .spin{width:36px;height:36px;margin:60px auto;border-radius:50%;border:3px solid var(--line);border-top-color:var(--onair);animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+.seg.logby{margin:0 0 14px}
+.cal.tm .cday .cn{font-size:10px;padding:0 3px;letter-spacing:-.4px}

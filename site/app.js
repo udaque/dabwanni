@@ -277,10 +277,10 @@ function fmtDHM(min){
 }
 // 막대: 채운 부분 전체를 둥근 끝으로 감싸고 그 안을 상태별 색으로 나눔 (색이 여럿이어도 오른쪽 끝이 둥글게)
 const hbarRow = (label, parts, max, total) => { const sum = parts.reduce((s, [, n]) => s + n, 0) || 1;
-  return `<span class="lab">${label}</span><span class="bar"><span class="fill" style="width:${(sum / max * 100).toFixed(2)}%">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / sum * 100).toFixed(2)}%"></i>` : '').join('')}</span></span><span class="num">${fmtN(total)}</span>`; };
+  return `<span class="lab">${label}</span><span class="bar"><span class="fill" style="width:${(sum / max * 100).toFixed(2)}%">${parts.map(([cls, n]) => n ? `<i class="${cls}" style="width:${(n / sum * 100).toFixed(2)}%"></i>` : '').join('')}</span></span><span class="num">${typeof total === 'string' ? total : fmtN(total)}</span>`; };
 let statsBy = 'q', statsTok = 0, dropN = 0;
 // 달력: 날마다 본 화수, 날짜를 누르면 그날 본 작품·회차 (지우기 가능)
-let calY = null, calM = null, calSel = null;
+let calY = null, calM = null, calSel = null, logBy = store.get('logBy', 'ep');      // 화수 기준 / 시청 시간 기준
 const WD = () => S.lang === 'ja' ? ['日', '月', '火', '水', '木', '金', '土'] : S.lang === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['일', '월', '화', '수', '목', '금', '토'];
 // 설정 「날짜 정리」: 한꺼번에 체크하며 자동으로 찍힌 날짜(같은 날짜에 5편 이상)를 날짜 단위로 비움
 function renderDateFix(){
@@ -292,19 +292,23 @@ function renderDateFix(){
 }
 function logHTML(){
   const now = new Date(); if (calY === null) { calY = now.getFullYear(); calM = now.getMonth(); }
-  const byDay = new Map(); for (const [d] of wlog) byDay.set(d, (byDay.get(d) || 0) + 1);
+  // 시청 시간 기준이면 한 화마다 그 작품의 1화 길이(모르면 형식별 평균)를 더함
+  const tm = logBy === 'time', val = k => tm ? ((w => w && w.d ? w.d / 60 : AVG_MIN[w?.ty] || 24)(BYK.get(k))) : 1;
+  const u = UL(), cellTxt = v => tm ? (v < 60 ? `${Math.round(v)}${u.m}` : `${+(v / 60).toFixed(1)}${u.h}`) : v, tot = v => tm ? fmtDHM(v) : fmtN(v);
+  const byDay = new Map(); for (const [d, k] of wlog) byDay.set(d, (byDay.get(d) || 0) + val(k));
   const pad = n => String(n).padStart(2, '0'), ym = `${calY}-${pad(calM + 1)}`;
   const first = new Date(calY, calM, 1).getDay(), days = new Date(calY, calM + 1, 0).getDate(), td = today();
   let cells = WD().map((x, i) => `<span class="cwd ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${x}</span>`).join('');
   for (let i = 0; i < first; i++) cells += '<span></span>';
   for (let d = 1; d <= days; d++) {
     const ds = `${ym}-${pad(d)}`, n = byDay.get(ds) || 0;
-    cells += `<button class="cday ${n ? 'has' : ''} ${ds === td ? 'today' : ''} ${ds === calSel ? 'sel' : ''}" data-day="${ds}"${n ? '' : ' disabled'}><span class="dn">${d}</span>${n ? `<span class="cn">${n}</span>` : ''}</button>`;
+    cells += `<button class="cday ${n ? 'has' : ''} ${ds === td ? 'today' : ''} ${ds === calSel ? 'sel' : ''}" data-day="${ds}"${n ? '' : ' disabled'}><span class="dn">${d}</span>${n ? `<span class="cn">${cellTxt(n)}</span>` : ''}</button>`;
   }
-  const monthN = wlog.filter(([d]) => d.startsWith(ym)).length;
-  let h = `<div class="stbox"><h2>${t('시청 달력')}<span class="pill">${fmtN(monthN)}</span></h2>
+  const monthN = wlog.filter(([d]) => d.startsWith(ym)).reduce((s, [, k]) => s + val(k), 0);
+  let h = `<div class="seg logby">${[['ep', '화수'], ['time', '시청 시간']].map(([v, l]) => `<button data-logby="${v}" class="${logBy === v ? 'on' : ''}">${t(l)}</button>`).join('')}</div>
+    <div class="stbox"><h2>${t('시청 달력')}<span class="pill">${tot(monthN)}</span></h2>
     <div class="calnav"><button data-cal="-1" aria-label="${t('이전 달')}">‹</button><b>${S.lang === 'en' ? `${calY}-${pad(calM + 1)}` : `${calY}${S.lang === 'ja' ? '年' : '년'} ${calM + 1}${S.lang === 'ja' ? '月' : '월'}`}</b><button data-cal="1" aria-label="${t('다음 달')}">›</button></div>
-    <div class="cal">${cells}</div>`;
+    <div class="cal ${tm ? 'tm' : ''}">${cells}</div>`;
   if (calSel) {
     const items = wlog.map((x, i) => [x, i]).filter(([[d]]) => d === calSel);
     h += `<div class="calday"><h3>${calSel}</h3>${items.length ? items.map(([[, k, ep], i]) => { const w = BYK.get(k); return `<div class="lrow"><button class="link" data-act="open" data-k="${esc(k)}">${esc(w ? bareTitle(title(w), w) : k)}</button><span class="pill">${esc(F('epNo', ep))}</span><button class="ldel" data-logdel="${i}" aria-label="${t('기록 지우기')}">✕</button></div>`; }).join('') : `<p class="stempty">${t('아직 기록이 없습니다.')}</p>`}</div>`;
@@ -313,14 +317,15 @@ function logHTML(){
   // 최근 30일 (날짜별)
   const D = []; for (let i = 29; i >= 0; i--) { const x = new Date(now - i * 864e5); const ds = new Date(x - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); D.push([ds, byDay.get(ds) || 0, x.getDay()]); }
   const dmax = Math.max(1, ...D.map(x => x[1]));
-  h += `<div class="stbox"><h2>${t('최근 30일')}<span class="pill">${fmtN(D.reduce((s, x) => s + x[1], 0))}</span></h2><div class="cols">${D.map(([ds, n, wd], i) => `<span class="col" title="${ds} ${n}"><i style="height:${(n / dmax * 100).toFixed(1)}%"></i><em class="${wd === 0 ? 'sun' : ''}">${(29 - i) % 7 === 0 ? `${+ds.slice(5, 7)}/${+ds.slice(8)}` : ''}</em></span>`).join('')}</div></div>`;
+  h += `<div class="stbox"><h2>${t('최근 30일')}<span class="pill">${tot(D.reduce((s, x) => s + x[1], 0))}</span></h2><div class="cols">${D.map(([ds, n, wd], i) => `<span class="col" title="${ds} ${tm ? fmtDHM(n) : n}"><i style="height:${(n / dmax * 100).toFixed(1)}%"></i><em class="${wd === 0 ? 'sun' : ''}">${(29 - i) % 7 === 0 ? `${+ds.slice(5, 7)}/${+ds.slice(8)}` : ''}</em></span>`).join('')}</div></div>`;
   // 요일별
-  const W = [0, 0, 0, 0, 0, 0, 0]; for (const [d] of wlog) W[new Date(d + 'T00:00').getDay()]++;
+  const W = [0, 0, 0, 0, 0, 0, 0]; for (const [d, k] of wlog) W[new Date(d + 'T00:00').getDay()] += val(k);
   const wmax = Math.max(1, ...W);
-  h += `<div class="stbox"><h2>${t('요일별')}</h2><div class="hbars">${W.map((n, i) => hbarRow(WD()[i], [['w', n]], wmax, n)).join('')}</div></div>`;
+  h += `<div class="stbox"><h2>${t('요일별')}</h2><div class="hbars">${W.map((n, i) => hbarRow(WD()[i], [['w', n]], wmax, tm ? fmtDHM(n) : n)).join('')}</div></div>`;
   return h;
 }
 function bindLog(){
+  $('#stats').querySelectorAll('[data-logby]').forEach(b => b.onclick = () => { logBy = b.dataset.logby; store.set('logBy', logBy); renderStats(); });
   $('#stats').querySelectorAll('[data-cal]').forEach(b => b.onclick = () => { calM += +b.dataset.cal; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } calSel = null; renderStats(); });
   $('#stats').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calSel = calSel === b.dataset.day ? null : b.dataset.day; renderStats(); });
   $('#stats').querySelectorAll('[data-logdel]').forEach(b => b.onclick = () => { wlog.splice(+b.dataset.logdel, 1); store.set('wlog', wlog); renderStats(); });
