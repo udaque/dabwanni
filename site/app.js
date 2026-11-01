@@ -59,7 +59,7 @@ function bareTitle(s, w){
   if (w.sm) {
     SEASON_RE.forEach(re => x = x.replace(re, ''));
     const sn = (w.sm.match(/s(\d+)/) || [])[1];
-    if (sn) x = x.replace(new RegExp('(\\s+|(?<=[가-힣]))' + sn + '$'), '');      // 「薬屋のひとりごと 3」, 「…합니다2」처럼 끝에 시즌 번호만 붙은 경우
+    if (sn && !/k/.test(w.sm)) x = x.replace(new RegExp('(\\s+|(?<=[가-힣]))' + sn + '$'), '');      // k: 제목에 붙은 번호가 정식 제목의 일부(「이세계 유유자적 농가 2」)라 남김      // 「薬屋のひとりごと 3」, 「…합니다2」처럼 끝에 시즌 번호만 붙은 경우
   }
   return x.replace(/\s*[\(（]\s*[\)）]/g, '').trim() || s;
 }
@@ -652,8 +652,10 @@ function render(){
   $('#filters').innerHTML = (S.tab === 'want' && !S.q ? `<div class="stscope wscope"><span class="stbase"><i class="dot i"></i>${t('관심만')}</span>
       <button data-act="wscope" data-v="g" class="${WSCOPE.g ? 'on' : ''}"><i class="dot g"></i>${t('보는 중')}</button>
       <button data-act="wscope" data-v="w" class="${WSCOPE.w ? 'on' : ''}"><i class="dot w"></i>${t('봤음')}</button></div>` : '') +
-    TYPE_ORDER.filter(ty => tc[ty]).map(ty => `<button class="chip ${S.types.has(ty) ? 'on' : ''}" data-act="type" data-v="${ty}">${t(TYPE[ty])}<span class="pill">${fmtN(tc[ty])}</span></button>`).join('') +
-    Object.keys(LEN).filter(l => lc[l]).map(l => `<button class="chip ${S.lens.has(l) ? 'on' : ''}" data-act="len" data-v="${l}">${t(LEN[l])}<span class="pill">${fmtN(lc[l])}</span></button>`).join('');
+    // 종류·길이를 한 줄씩: 왼쪽에 이름, 오른쪽 칩들은 옆으로 밀어 보기 (가장자리는 흐려짐)
+    `<div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${TYPE_ORDER.filter(ty => tc[ty]).map(ty => `<button class="chip ${S.types.has(ty) ? 'on' : ''}" data-act="type" data-v="${ty}">${t(TYPE[ty])}<span class="pill">${fmtN(tc[ty])}</span></button>`).join('')}</div></div>` +
+    (Object.keys(LEN).some(l => lc[l]) ? `<div class="frow"><span class="flab">${t('길이')}</span><div class="fscroll">${Object.keys(LEN).filter(l => lc[l]).map(l => `<button class="chip ${S.lens.has(l) ? 'on' : ''}" data-act="len" data-v="${l}">${t(LEN[l])}<span class="pill">${fmtN(lc[l])}</span></button>`).join('')}</div></div>` : '');
+  $('#filters').querySelectorAll('.fscroll').forEach(el => { const f = () => { el.classList.toggle('fl', el.scrollLeft > 2); el.classList.toggle('fr', el.scrollLeft + el.clientWidth < el.scrollWidth - 2); }; el.onscroll = f; f(); });
   // 뮤직비디오는 형식 거르개에서 직접 고를 때만 보임 (기록이 있는 것은 보는 중·봤음·관심 탭에서 그대로 보임)
   let L = base.filter(w => (S.types.size ? S.types.has(w.ty) : (w.ty !== 'P' || ['watching', 'watched', 'want'].includes(S.tab))) && (!S.lens.size || S.lens.has(w.lk)));
   let html = S.q ? idxResults(S.q, 'people', t('인물'), 'person', 'p') + idxResults(S.q, 'studios', t('제작사'), 'studio', 's') : '';

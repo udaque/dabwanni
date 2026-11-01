@@ -703,6 +703,26 @@ def main():
     for r in c['rows']:
         w = BY[r[0]]
         sm_ = season_code(w.get('ja'), w.get('r'), ' '.join(x for x in (w.get('en'), w.get('_alt')) if x), roman=w.get('_pre'))
+        if not sm_ and w.get('ty') in ('T', 'O'):
+            # 시즌 표시가 없는 속편(「政宗くんのリベンジR」, 「異世界のんびり農家 2」): 원제가 이어지는 TV·웹 이전 시즌을 거슬러 세어 몇 기인지 정함
+            n_, cur_, seen_ = 1, r[0], set()
+            while cur_ not in seen_:
+                seen_.add(cur_)
+                pre = next((rr['k'] for rr in (details.get(cur_) or {}).get('relations') or [] if rr.get('type') == 'PREQUEL' and (BY.get(rr['k']) or {}).get('ty') in ('T', 'O')
+                            and (lambda a_, b_: a_ and b_ and (a_ in b_ or b_ in a_))(_base_n(BY[rr['k']].get('ja')), _base_n(BY[cur_].get('ja')))), None)
+                if not pre: break
+                n_ += 1; cur_ = pre
+            if n_ > 1:
+                sm_ = f's{n_}'
+                # 원제 끝에 붙은 짧은 영문·숫자 표시(R, 2)는 한국어 제목에도 붙임 (이전 시즌 제목을 그대로 받은 경우)
+                pj = unicodedata.normalize('NFKC', BY[cur_ if False else next(rr['k'] for rr in details[r[0]]['relations'] if rr.get('type') == 'PREQUEL')].get('ja') or '')
+                mj = unicodedata.normalize('NFKC', w.get('ja') or '')
+                suf = re.fullmatch(re.escape(pj) + r'[\s~〜\-]*([A-Za-z0-9]{1,4})[\s~〜\-]*', mj)
+                if suf and w.get('ko') and not w['ko'].endswith(suf.group(1)):
+                    w['ko'] = f"{w['ko']} {suf.group(1)}"
+                    if r[0] in details: details[r[0]].setdefault('titles', {})['ko'] = w['ko']
+                    if suf.group(1) == str(n_): sm_ += 'k'      # 「… 2」: 번호가 정식 제목의 일부라 화면에서 떼지 않게
+        if (OVR.get(r[0]) or {}).get('sm'): sm_ = OVR[r[0]]['sm']                 # 직접 정한 시즌 꼬리표
         if sm_ and w.get('ty') == 'M': sm_ = None                                   # 극장판의 「Part 5」·「第5話」는 시즌·쿨이 아니라 편 번호
         elif sm_ and w.get('ty') not in ('T', 'O'): sm_ = re.sub(r'[bc]\d+', '', sm_) or None
         r[smi] = sm_      # 제목 뒤 시즌·쿨 꼬리표용

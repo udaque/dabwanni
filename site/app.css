@@ -332,3 +332,13 @@ html{touch-action:manipulation}
 .stsub::-webkit-scrollbar{display:none}
 .stsub button{flex:1 1 0;min-width:max-content;height:38px;padding:0 8px;border:1px solid var(--line);border-radius:19px;background:var(--bg);color:var(--sub);font-size:14px;font-weight:700;white-space:nowrap}
 .stsub button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
+/* 종류·길이 거르개: 한 줄씩 옆으로 밀기, 가장자리 흐리게 */
+.frow{flex:1 1 100%;display:flex;align-items:center;gap:10px;margin:0 0 2px;min-width:0}
+.flab{flex:none;font-size:13px;font-weight:700;color:var(--sub);white-space:nowrap}
+.fscroll{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px 0}
+.fscroll::-webkit-scrollbar{display:none}
+.fscroll .chip{flex:none;white-space:nowrap}
+.fscroll.fr{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.fscroll.fl{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px);mask-image:linear-gradient(90deg,transparent,#000 28px)}
+.fscroll.fl.fr{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
