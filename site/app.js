@@ -250,7 +250,7 @@ function bind(){
   window.addEventListener('hashchange', route);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
   $('#exportBtn').onclick = () => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v:3, marks, wlog, whereCustom: whereCustom()}, null, 1)], {type:'application/json'})      // 시청 기록·직접 추가한 시청처도 함께);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v:3, marks, wlog, whereCustom: whereCustom()}, null, 1)], {type:'application/json'}));      // 시청 기록·직접 추가한 시청처도 함께
     a.download = 'dabwanni-marks.json'; a.click();
   };
   $('#importFile').onchange = async e => {
