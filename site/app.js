@@ -22,8 +22,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const fmtN = n => Number(n).toLocaleString('ko-KR');
 const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };   // 기기 시간대 기준 날짜
 // 시청 기록: + 를 한 번 눌러 한 화 올린 것만 [날짜, 작품, 화] 로 남김 (길게 눌러 여러 화·회차 목록에서 한꺼번에·「봤음」은 예전 것 정리로 보고 남기지 않음)
-function logLive(k){ const m = M(k), w = BYK.get(k), tot = total(w); if (!m.ep) return; wlog.push([today(), k, m.ep]); if (!m.start) m.start = today(); if (tot && m.ep >= tot && !m.end) m.end = today(); store.set('wlog', wlog); save(); }
-function logUndo(k, ep){ for (let i = wlog.length - 1; i >= 0; i--) if (wlog[i][1] === k && wlog[i][2] === ep) { wlog.splice(i, 1); store.set('wlog', wlog); return; } }
+function logLive(k){ const m = M(k), w = BYK.get(k), tot = total(w); if (!m.ep) return; wlog.push([today(), k, m.ep]); if (!m.start) m.start = today(); if (tot && m.ep >= tot && !m.end) m.end = today(); store.set('wlog', wlog); save(); syncSoon(); }
+function logUndo(k, ep){ for (let i = wlog.length - 1; i >= 0; i--) if (wlog[i][1] === k && wlog[i][2] === ep) { tombLog(wlog[i]); wlog.splice(i, 1); store.set('wlog', wlog); syncSoon(); return; } }
 const store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
@@ -31,7 +31,10 @@ const store = {
 
 let W = [], BYK = new Map(), STUDIOS = [], TAGS = [], IDX = {people:null, studios:null}, usedAuto = false;
 const marks = store.get('marks', {});
-const wlog = store.get('wlog', []);   // 시청 기록 [[날짜, 작품, 화], …]   // {k: {w,i,ep,rate,memo,re,start,end}}
+const wlog = store.get('wlog', []);
+const TOMB = store.get('syncTomb', {m: {}, l: {}});         // 지운 작품·지운 시청 기록과 그 시각 (동기화에서 되살아나지 않게)
+const SNAP = new Map(Object.entries(marks).map(([k, m]) => [k, JSON.stringify(m, (key, v) => key === 'u' ? undefined : v)]));
+const tombLog = e => { if (e) { TOMB.l[e.join('|')] = Date.now(); store.set('syncTomb', TOMB); } };   // 시청 기록 [[날짜, 작품, 화], …]   // {k: {w,i,ep,rate,memo,re,start,end}}
 const S = { tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
 
 /* ---------- 데이터 ---------- */
@@ -164,7 +167,83 @@ async function boot(){
   if (moved) save();
   $('#totalPill').textContent = F('count', fmtN(W.length));
   bind(); route(); render();
-  loadEdits();
+  loadEdits(); initSync();
+}
+/* ---------- 구글 드라이브 동기화 (픽픽과 같은 방식) ----------
+   드라이브의 앱 전용 숨김 공간에 파일 하나(dabwanni-sync.json). 작품별로 마지막에 바뀐 쪽을 고르고, 지운 것은 지운 시각으로 판단 */
+const SYNC = {st: null, tok: null, exp: 0, busy: false, timer: null, last: store.get('syncLast', 0), err: ''};
+async function syncStatus(){ try { SYNC.st = await (await fetch('/api/gauth/status', {cache: 'no-store'})).json(); } catch { SYNC.st = {ready: false}; } return SYNC.st; }
+async function gTok(){
+  if (SYNC.tok && SYNC.exp > Date.now() + 60000) return SYNC.tok;
+  const r = await fetch('/api/gauth/token', {method: 'POST'}); const d = await r.json();
+  if (!r.ok) { if (r.status === 401) SYNC.st = {...SYNC.st, connected: false}; throw new Error(d.error || 'token'); }
+  SYNC.tok = d.access_token; SYNC.exp = Date.now() + d.expires_in * 1000; return SYNC.tok;
+}
+const gApi = async (url, opt = {}) => { const r = await fetch(url, {...opt, headers: {...(opt.headers || {}), Authorization: 'Bearer ' + await gTok()}}); if (!r.ok) throw new Error('drive ' + r.status); return r; };
+function mergeSync(L, R_){
+  const out = {v: 1, marks: {}, wlog: [], tomb: {m: {...(R_.tomb?.m || {})}, l: {...(R_.tomb?.l || {})}}, whereCustom: [...new Set([...(L.whereCustom || []), ...(R_.whereCustom || [])])]};
+  for (const [k, t] of Object.entries(L.tomb.m)) out.tomb.m[k] = Math.max(t, out.tomb.m[k] || 0);
+  for (const [k, t] of Object.entries(L.tomb.l)) out.tomb.l[k] = Math.max(t, out.tomb.l[k] || 0);
+  for (const k of new Set([...Object.keys(L.marks), ...Object.keys(R_.marks || {})])) {
+    const a = L.marks[k], b = (R_.marks || {})[k], best = !a ? b : !b ? a : ((a.u || 0) >= (b.u || 0) ? a : b);
+    if ((out.tomb.m[k] || 0) > (best.u || 0)) continue;           // 지운 게 더 나중이면 지움
+    out.marks[k] = best; delete out.tomb.m[k];
+  }
+  const seen = new Set();
+  for (const e of [...L.wlog, ...(R_.wlog || [])]) { const s = e.join('|'); if (seen.has(s) || out.tomb.l[s]) continue; seen.add(s); out.wlog.push(e); }
+  out.wlog.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  return out;
+}
+async function syncNow(manual){
+  if (SYNC.busy || !SYNC.st?.connected) return; SYNC.busy = true; SYNC.err = ''; renderSync();
+  try {
+    const q = encodeURIComponent("name='dabwanni-sync.json'");
+    const list = await (await gApi(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`)).json();
+    const id = list.files?.[0]?.id;
+    const remote = id ? await (await gApi(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).json().catch(() => ({})) : {};
+    const merged = mergeSync({marks, wlog, tomb: TOMB, whereCustom: whereCustom()}, remote);
+    // 이 기기에 반영
+    for (const k of Object.keys(marks)) if (!merged.marks[k]) delete marks[k];
+    Object.assign(marks, merged.marks); SNAP.clear(); for (const [k, m] of Object.entries(marks)) SNAP.set(k, markSig(m));
+    wlog.splice(0, wlog.length, ...merged.wlog); Object.assign(TOMB, merged.tomb);
+    store.set('marks', marks); store.set('wlog', wlog); store.set('syncTomb', TOMB); store.set('whereCustom', merged.whereCustom);
+    // 드라이브에 올림
+    const body = JSON.stringify(merged);
+    if (id) await gApi(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body});
+    else {
+      const fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify({name: 'dabwanni-sync.json', parents: ['appDataFolder']})], {type: 'application/json'}));
+      fd.append('file', new Blob([body], {type: 'application/json'}));
+      await gApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {method: 'POST', body: fd});
+    }
+    SYNC.last = Date.now(); store.set('syncLast', SYNC.last);
+    if (S.tab !== 'settings') render();
+  } catch (e) { SYNC.err = String(e.message || e); }
+  SYNC.busy = false; renderSync();
+}
+function syncSoon(){ if (!SYNC.st?.connected) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncNow, 8000); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && SYNC.timer) { clearTimeout(SYNC.timer); SYNC.timer = null; syncNow(); } });
+function renderSync(){
+  const box = $('#setSync'); if (!box) return;
+  const st = SYNC.st;
+  if (!st) { box.innerHTML = `<p class="setnote">${t('확인하는 중')}</p>`; return; }
+  if (!st.ready) { box.innerHTML = `<p class="setnote">${t('서버에 구글 연결 설정이 아직 없습니다.')}</p>`; return; }
+  const when = SYNC.last ? new Date(SYNC.last).toLocaleString(S.lang === 'ko' ? 'ko-KR' : S.lang) : '';
+  box.innerHTML = st.connected
+    ? `<div class="syncst"><span class="dot i"></span><b>${esc(st.email || t('연결됨'))}</b></div>
+       <p class="setnote">${SYNC.busy ? t('동기화하는 중') : SYNC.err ? `${t('동기화하지 못했습니다.')} (${esc(SYNC.err)})` : when ? `${t('마지막 동기화')} ${esc(when)}` : ''}</p>
+       <div class="setbtns"><button id="syncNowBtn" ${SYNC.busy ? 'disabled' : ''}>${t('지금 동기화')}</button><button id="syncOffBtn">${t('연결 끊기')}</button></div>`
+    : `<div class="setbtns"><button id="syncOnBtn">${t('구글 계정으로 연결')}</button></div>`;
+  $('#syncOnBtn') && ($('#syncOnBtn').onclick = () => location.href = '/api/gauth/start');
+  $('#syncNowBtn') && ($('#syncNowBtn').onclick = () => syncNow(true));
+  $('#syncOffBtn') && ($('#syncOffBtn').onclick = async () => { if (!confirm(t('구글 연결을 끊을까요? 이 기기의 기록은 그대로 남습니다.'))) return; await fetch('/api/gauth/logout', {method: 'POST'}); SYNC.st = {...SYNC.st, connected: false, email: null}; SYNC.tok = null; renderSync(); });
+}
+async function initSync(){
+  const h = location.hash.match(/^#sync=(\w+)/);
+  if (h) history.replaceState('', '', location.pathname + location.search);
+  await syncStatus(); renderSync();
+  if (h && h[1] !== 'ok') { SYNC.err = t('구글 연결에 실패했습니다.') + ' (' + h[1] + ')'; renderSync(); }
+  if (SYNC.st.connected) syncNow();
 }
 /* ---------- 직접 수정 (관리자) ----------
    확정 수정은 언제나 적용, 임시 수정은 원천 값이 수정할 때 값(base)과 같을 때만 적용 → 원천이 바뀌면 원천 값으로 돌아감 */
@@ -274,7 +353,14 @@ async function loadIdx(){
   if (!IDX.people) IDX.people = await getJSON('data/people/index.json') || {};
   if (!IDX.studios) IDX.studios = await getJSON('data/studios/index.json') || {};
 }
-function save(){ for (const k in marks) { const m = marks[k]; if (!m.w && !m.i && !m.ep && !m.rate && !m.memo && !m.re && !m.start && !m.end && !m.where) delete marks[k]; } store.set('marks', marks); }
+function save(){
+  for (const k in marks) { const m = marks[k]; if (!m.w && !m.i && !m.ep && !m.rate && !m.memo && !m.re && !m.start && !m.end && !m.where) delete marks[k]; }
+  const now = Date.now();
+  for (const k in marks) { const s = markSig(marks[k]); if (SNAP.get(k) !== s) { marks[k].u = now; SNAP.set(k, s); delete TOMB.m[k]; } }
+  for (const k of [...SNAP.keys()]) if (!marks[k]) { SNAP.delete(k); TOMB.m[k] = now; }
+  store.set('marks', marks); store.set('syncTomb', TOMB); syncSoon();
+}
+const markSig = m => JSON.stringify(m, (key, v) => key === 'u' ? undefined : v);
 const M = k => marks[k] || (marks[k] = {});
 
 function onClick(e){
@@ -403,7 +489,7 @@ function bindLog(){
   $('#stats').querySelectorAll('[data-logby]').forEach(b => b.onclick = () => { logBy = b.dataset.logby; store.set('logBy', logBy); renderStats(); });
   $('#stats').querySelectorAll('[data-cal]').forEach(b => b.onclick = () => { calM += +b.dataset.cal; if (calM < 0) { calM = 11; calY--; } if (calM > 11) { calM = 0; calY++; } calSel = null; renderStats(); });
   $('#stats').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { calSel = calSel === b.dataset.day ? null : b.dataset.day; renderStats(); });
-  $('#stats').querySelectorAll('[data-logdel]').forEach(b => b.onclick = () => { wlog.splice(+b.dataset.logdel, 1); store.set('wlog', wlog); renderStats(); });
+  $('#stats').querySelectorAll('[data-logdel]').forEach(b => b.onclick = () => { tombLog(wlog[+b.dataset.logdel]); wlog.splice(+b.dataset.logdel, 1); store.set('wlog', wlog); syncSoon(); renderStats(); });
 }
 // 막대를 누르면 그 아래에 해당 작품들이 펼쳐짐 (상태 색 점 + 제목, 필요하면 덧붙임 말)
 const stDot = m => m.w ? 'w' : m.ep ? 'g' : 'i';
@@ -656,7 +742,7 @@ function render(){
     document.querySelectorAll('#setLang [data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === S.lang));
     document.querySelectorAll('#setTheme [data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === (S.theme || 'system')));
     document.querySelectorAll('#setEpHide [data-ephide]').forEach(b => b.classList.toggle('on', (b.dataset.ephide === '1') === S.epHide));
-    renderDateFix();
+    renderDateFix(); renderSync();
     return;
   }
   const seasonMode = S.tab === 'season' && !S.q;
