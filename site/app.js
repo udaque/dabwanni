@@ -35,7 +35,7 @@ const wlog = store.get('wlog', []);
 const TOMB = store.get('syncTomb', {m: {}, l: {}});         // 지운 작품·지운 시청 기록과 그 시각 (동기화에서 되살아나지 않게)
 const SNAP = new Map(Object.entries(marks).map(([k, m]) => [k, JSON.stringify(m, (key, v) => key === 'u' ? undefined : v)]));
 const tombLog = e => { if (e) { TOMB.l[e.join('|')] = Date.now(); store.set('syncTomb', TOMB); } };   // 시청 기록 [[날짜, 작품, 화], …]   // {k: {w,i,ep,rate,memo,re,start,end}}
-const S = { tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
+const S = { tagf:new Set(), tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
 
 /* ---------- 데이터 ---------- */
 function fnv(s){ let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h % NB; }
@@ -403,6 +403,13 @@ function onClick(e){
       el.replaceWith(f); return;
     }
     if (act === 'wscope') { WSCOPE[el.dataset.v] = !WSCOPE[el.dataset.v]; store.set('wantScope', WSCOPE); S.shown = PAGE; render(); return; }
+    if (act === 'tagf') { const v = +el.dataset.v; S.tagf.has(v) ? S.tagf.delete(v) : S.tagf.add(v); S.shown = PAGE; render(); return; }
+    if (act === 'tagGo') {
+      const i = TAGS.indexOf(el.dataset.tag); if (i < 0) return;
+      S.tagf = new Set([i]); S.types.clear(); S.lens.clear(); S.q = ''; $('#q').value = ''; $('#qClear').hidden = true;
+      S.tab = 'all'; S.shown = PAGE; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === 'all'));
+      closeSheet(); window.scrollTo(0, 0); return;
+    }
     if (act === 'type' || act === 'len') { const set = act === 'type' ? S.types : S.lens, v = el.dataset.v; set.has(v) ? set.delete(v) : set.add(v); S.shown = PAGE; render(); return; }
     if (act === 'more') { S.shown += PAGE * 2; render(); return; }
   }
@@ -757,9 +764,15 @@ function render(){
     // 종류·길이를 한 줄씩: 왼쪽에 이름, 오른쪽 칩들은 옆으로 밀어 보기 (가장자리는 흐려짐)
     `<div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${TYPE_ORDER.filter(ty => tc[ty]).map(ty => `<button class="chip ${S.types.has(ty) ? 'on' : ''}" data-act="type" data-v="${ty}">${t(TYPE[ty])}<span class="pill">${fmtN(tc[ty])}</span></button>`).join('')}</div></div>` +
     (Object.keys(LEN).some(l => lc[l]) || lc.unk ? `<div class="frow"><span class="flab">${t('길이')}</span><div class="fscroll">${[...Object.keys(LEN), 'unk'].filter(l => lc[l]).map(l => `<button class="chip ${S.lens.has(l) ? 'on' : ''}" data-act="len" data-v="${l}">${t(l === 'unk' ? '미상' : LEN[l])}<span class="pill">${fmtN(lc[l])}</span></button>`).join('')}</div></div>` : '');
+  if (S.tab === 'all') {
+    // 태그: 지금 목록에 많이 붙은 순, 고른 태그는 맨 앞. 여러 개 고르면 모두 붙은 작품만
+    const gc = {}; base.forEach(w => (w.tags || []).forEach(i => gc[i] = (gc[i] || 0) + 1));
+    const ids = Object.keys(gc).map(Number).sort((a, b) => (S.tagf.has(b) - S.tagf.has(a)) || gc[b] - gc[a]);
+    if (ids.length) $('#filters').insertAdjacentHTML('beforeend', `<div class="frow"><span class="flab">${t('태그')}</span><div class="fscroll">${ids.map(i => `<button class="chip ${S.tagf.has(i) ? 'on' : ''}" data-act="tagf" data-v="${i}">${esc(t(TAGS[i]))}<span class="pill">${fmtN(gc[i])}</span></button>`).join('')}</div></div>`);
+  }
   $('#filters').querySelectorAll('.fscroll').forEach(el => { const f = () => { el.classList.toggle('fl', el.scrollLeft > 2); el.classList.toggle('fr', el.scrollLeft + el.clientWidth < el.scrollWidth - 2); }; el.onscroll = f; f(); });
   // 뮤직비디오는 형식 거르개에서 직접 고를 때만 보임 (기록이 있는 것은 보는 중·봤음·관심 탭에서 그대로 보임)
-  let L = base.filter(w => (S.types.size ? S.types.has(w.ty) : (w.ty !== 'P' || ['watching', 'watched', 'want'].includes(S.tab))) && (!S.lens.size || S.lens.has(w.lk || 'unk')));
+  let L = base.filter(w => (S.types.size ? S.types.has(w.ty) : (w.ty !== 'P' || ['watching', 'watched', 'want'].includes(S.tab))) && (!S.lens.size || S.lens.has(w.lk || 'unk')) && (S.tab !== 'all' || ![...S.tagf].some(i => !(w.tags || []).includes(i))));
   let html = S.q ? idxResults(S.q, 'people', t('인물'), 'person', 'p') + idxResults(S.q, 'studios', t('제작사'), 'studio', 's') : '';
   const hasIdx = html !== '';
   if (seasonMode) {
@@ -900,7 +913,7 @@ function workHTML(w, d){
     ['평점', d?.averageScore ? F('score', d.averageScore) : ''],
     ['인기', d?.popularity ? F('popularity', fmtN(d.popularity)) : ''],
     ['연령 등급', d?.adult ? t('성인') : ''],
-    ['장르·태그', tags.length ? `<div class="pills">${tags.map(x => `<span class="pill">${esc(t(x))}</span>`).join('')}</div>` : ''],
+    ['장르·태그', tags.length ? `<div class="pills">${tags.map(x => TAGS.includes(x) ? `<button class="pill tagbtn" data-act="tagGo" data-tag="${esc(x)}">${esc(t(x))}</button>` : `<span class="pill">${esc(t(x))}</span>`).join('')}</div>` : ''],
   ]));
 
   // 링크

@@ -350,3 +350,7 @@ html{touch-action:manipulation}
 /* 동기화 */
 .syncst{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:15px;word-break:break-all}
 .setbtns button[disabled]{opacity:.5}
+
+/* 상세 화면 태그 버튼 */
+.pill.tagbtn{border:0;font:inherit;font-size:13px;cursor:pointer;color:inherit}
+.pill.tagbtn:active{opacity:.7}
