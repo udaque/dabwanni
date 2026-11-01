@@ -312,3 +312,17 @@ html{touch-action:manipulation}
 @media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
 .seg.logby{margin:0 0 14px}
 .cal.tm .cday .cn{font-size:10px;padding:0 3px;letter-spacing:-.4px}
+
+/* 관리자 직접 수정 */
+.adm{margin-top:6px;height:30px;padding:0 12px;border:1px dashed var(--onair);border-radius:8px;background:none;color:var(--onair);font-weight:700;font-size:13px;white-space:nowrap}
+#editor{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.ebox{width:min(520px,100%);max-height:88vh;overflow:auto;background:var(--surface);color:var(--ink);border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px))}
+.ebox h3{margin:0 0 12px;font-size:20px}
+.erow{display:grid;grid-template-columns:136px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+.erow span{font-size:14px;color:var(--sub);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.erow em{font-style:normal;font-size:11px}.erow em.fixed{background:var(--onair);color:#fff}.erow em.temp{background:var(--watching);color:#fff}
+.erow input,.erow select{width:100%;min-width:0;height:40px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:16px}
+.emode{margin:14px 0}
+.ebtns{display:flex;gap:8px}.ebtns button{flex:1;height:44px;border-radius:10px;font-weight:700;font-size:15px;white-space:nowrap}
+.ecancel{border:1px solid var(--line);background:var(--bg);color:var(--ink)}.esave{border:0;background:var(--ink);color:var(--surface)}
+.emsg{color:var(--onair);font-size:14px;margin:10px 0 0}

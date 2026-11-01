@@ -44,7 +44,7 @@ async function item(kind, id){
   return ((await bucketCache.get(key)) || {})[id] || null;
 }
 function lenKind(w){ const m = w.d ? w.d / 60 : null; if (m == null) return null; return m <= 5 ? 'short' : m <= 17 ? 'half' : m <= 35 ? 'normal' : 'long'; }
-function title(w, lang = S.lang){ const o = {ko:w.ko, ja:w.ja, en:w.en || w.r}; return o[lang] || (lang === 'en' ? w.r : null) || o.ko || o.ja || o.en || w.r; }
+function title(w, lang = S.lang){ const o = {ko:w.tko || w.ko, ja:w.ja, en:w.en || w.r}; return o[lang] || (lang === 'en' ? w.r : null) || o.ko || o.ja || o.en || w.r; }
 // 시즌·쿨 꼬리표: 제목에서 「3기」 「第2クール」 「Season 3」 같은 표시를 빼고, 제목 바로 뒤에 꼬리표로 붙임
 const SEASON_RE = [
   /\s*第\s*\d+\s*期/g, /\s*\d+\s*期(?=\s|$)/g, /\s*[第割]\s*\d+\s*クール/g, /\s*\d+\s*クール目/g, /\s*第\s*\d+\s*シーズン/g, /\s*第\s*\d+\s*部/g,
@@ -73,7 +73,7 @@ function seasonTags(w){
   if (m === 'f') out.push(L === 'ja' ? 'ファイナル' : L === 'en' ? 'Final' : '파이널');
   return out.map(x => ` <span class="stag">${x}</span>`).join('');
 }
-const titleHTML = w => esc(bareTitle(title(w), w)) + seasonTags(w);
+const titleHTML = w => w.tko && S.lang === 'ko' ? esc(w.tko) : esc(bareTitle(title(w), w)) + seasonTags(w);      // 직접 정한 메인 타이틀은 적은 그대로
 function subtitle(w){ const tt = title(w); return (S.lang === 'ko' ? [w.ja, w.en, w.r] : S.lang === 'ja' ? [w.en, w.r, w.ko] : [w.ja, w.r, w.ko]).find(x => x && x !== tt) || ''; }
 // 큰 키 비주얼(MAL의 「l」 판)이 없으면 보통 크기로, 그것도 없으면 빈 자리로
 function imgFallback(el){
@@ -156,7 +156,69 @@ async function boot(){
   if (moved) save();
   $('#totalPill').textContent = F('count', fmtN(W.length));
   bind(); route(); render();
+  loadEdits();
 }
+/* ---------- 직접 수정 (관리자) ----------
+   확정 수정은 언제나 적용, 임시 수정은 원천 값이 수정할 때 값(base)과 같을 때만 적용 → 원천이 바뀌면 원천 값으로 돌아감 */
+let EDITS = {w: {}, p: {}}, ADMIN = false;
+const WF = [['title', '한국어 메인 타이틀', 'text'], ['ko', '한국어 제목', 'text'], ['e', '총 화수', 'num'], ['y', '방영 연도', 'num'], ['q', '방영 분기', 'q'], ['ty', '형식', 'ty'], ['d', '1화 길이(분)', 'num']];
+const srcOf = (w, f) => (w._src ||= {title: '', ko: w.ko || '', e: w.e ?? '', y: w.y ?? '', q: w.q ?? '', ty: w.ty || '', d: w.d ? Math.round(w.d / 60) : ''})[f];
+const live = (e, src) => e && (e.mode === 'fixed' || String(e.base ?? '') === String(src ?? ''));
+function applyEdits(){
+  for (const w of W) if (w._src || EDITS.w[w.k]) {
+    const ed = EDITS.w[w.k] || {}; srcOf(w, 'ko');
+    const v = f => live(ed[f], w._src[f]) ? ed[f].v : null;
+    w.tko = v('title') || null;
+    w.ko = v('ko') ?? (w._src.ko || null); w._koEd = v('ko') != null;
+    w.e = v('e') != null ? +v('e') : (w._src.e === '' ? null : w._src.e);
+    w.y = v('y') != null ? +v('y') : (w._src.y === '' ? null : w._src.y);
+    w.q = v('q') != null ? +v('q') : (w._src.q === '' ? null : w._src.q);
+    w.ty = v('ty') ?? w._src.ty;
+    w.d = v('d') != null ? +v('d') * 60 : (w._src.d === '' ? w.d : w._src.d * 60 || w.d);
+    w.n = norm([w.r, w.ja, w.ko, w.en, w.tko].join('|')); w.lk = lenKind(w);
+  }
+}
+function pEdit(p, id){ const e = (EDITS.p[id ?? p.pid] || {}).ko; return live(e, p.ko || '') ? {...p, ko: e.v, auto: 0} : p; }
+async function loadEdits(){
+  try { const [e, me] = await Promise.all([fetch('/api/edits', {cache: 'no-store'}).then(r => r.ok ? r.json() : null), fetch('/api/me', {cache: 'no-store'}).then(r => r.ok ? r.json() : null)]);
+    if (e) { EDITS = {w: e.w || {}, p: e.p || {}}; applyEdits(); }
+    ADMIN = !!me?.admin;
+    if (e || ADMIN) { render(); if (location.hash) route(); }
+  } catch {}
+}
+function openEditor(scope, id){
+  const w = scope === 'w' ? BYK.get(id) : null, cur = (EDITS[scope][id] || {});
+  const rows = scope === 'w' ? WF : [['ko', '한국어 이름', 'text']];
+  const src = f => scope === 'w' ? srcOf(w, f) : (editorP?.ko || '');
+  const firstMode = Object.values(cur)[0]?.mode || 'fixed';
+  const field = ([f, label, kind]) => {
+    const val = cur[f] ? cur[f].v : '', ph = src(f) === '' || src(f) == null ? '' : String(src(f));
+    const inp = kind === 'q' ? `<select data-f="${f}"><option value="">${esc(ph ? F('quarter', +ph) : '—')}</option>${[1, 2, 3, 4].map(n => `<option value="${n}" ${String(val) === String(n) ? 'selected' : ''}>${F('quarter', n)}</option>`).join('')}</select>`
+      : kind === 'ty' ? `<select data-f="${f}"><option value="">${esc(ph ? t(TYPE[ph]) : '—')}</option>${TYPE_ORDER.map(x => `<option value="${x}" ${val === x ? 'selected' : ''}>${t(TYPE[x])}</option>`).join('')}</select>`
+      : `<input data-f="${f}" type="${kind === 'num' ? 'number' : 'text'}" ${kind === 'num' ? 'inputmode="numeric"' : ''} value="${esc(val)}" placeholder="${esc(ph)}">`;
+    return `<label class="erow"><span>${t(label)}${cur[f] ? `<em class="pill ${cur[f].mode}">${t(cur[f].mode === 'fixed' ? '확정' : '임시')}</em>` : ''}</span>${inp}</label>`;
+  };
+  const box = document.createElement('div'); box.id = 'editor';
+  box.innerHTML = `<div class="ebox" role="dialog" aria-modal="true"><h3>${t('직접 수정')}</h3>${rows.map(field).join('')}
+    <div class="seg emode"><button data-m="fixed" class="${firstMode === 'fixed' ? 'on' : ''}">${t('확정 수정')}</button><button data-m="temp" class="${firstMode === 'temp' ? 'on' : ''}">${t('임시 수정')}</button></div>
+    <div class="ebtns"><button class="ecancel">${t('닫기')}</button><button class="esave">${t('저장')}</button></div><p class="emsg" hidden></p></div>`;
+  document.body.appendChild(box);
+  let mode = firstMode;
+  box.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { mode = b.dataset.m; box.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('on', x === b)); });
+  box.querySelector('.ecancel').onclick = () => box.remove();
+  box.onclick = e => { if (e.target === box) box.remove(); };
+  box.querySelector('.esave').onclick = async () => {
+    const changes = {}, base = {};
+    box.querySelectorAll('[data-f]').forEach(el => { const f = el.dataset.f, v = el.value.trim(); changes[f] = v === '' ? null : v; base[f] = src(f) ?? ''; });
+    const msg = box.querySelector('.emsg');
+    try {
+      const r = await fetch('/api/edits', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({scope, id, mode, changes, base})});
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status);
+      EDITS = {w: d.w || {}, p: d.p || {}}; applyEdits(); box.remove(); render(); route();
+    } catch (e) { msg.hidden = false; msg.textContent = String(e.message || e); }
+  };
+}
+let editorP = null;
 
 /* ---------- 이벤트 ---------- */
 function bind(){
@@ -235,6 +297,8 @@ function onClick(e){
     if (act === 're+' || act === 're-') { const m = M(k); m.re = Math.max(0, (m.re || 0) + (act === 're+' ? 1 : -1)); save(); refresh(k); return; }
     if (act === 'open') { location.hash = '#/w/' + encodeURIComponent(k); return; }
     if (act === 'person') { location.hash = '#/p/' + encodeURIComponent(el.dataset.p); return; }
+    if (act === 'editw') { openEditor('w', el.dataset.k); return; }
+    if (act === 'editp') { openEditor('p', el.dataset.p); return; }
     if (act === 'studio') { location.hash = '#/s/' + encodeURIComponent(el.dataset.s); return; }
     if (act === 'yt') {
       const f = Object.assign(document.createElement('iframe'), {src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(el.dataset.yt)}?autoplay=1&playsinline=1&rel=0`,
@@ -663,7 +727,7 @@ function nm(n, opts = {}){
   const cls = n.auto && main === n.ko ? 'auto' : '';
   return `<span class="${cls}">${esc(main)}</span>${sub && !opts.short ? ` <span class="s ${S.lang === 'ja' && n.auto ? 'auto' : ''}">${esc(sub)}</span>` : ''}`;
 }
-const pLink = p => `<button class="link" data-act="person" data-p="${esc(p.pid)}">${nm(p, {short:true})}</button>`;
+const pLink = p => `<button class="link" data-act="person" data-p="${esc(p.pid)}">${nm(pEdit(p), {short:true})}</button>`;
 const sLink = s => `<button class="link" data-act="studio" data-s="${esc(s.sid)}">${nm(s, {short:true})}</button>`;
 const sec = (h, body, count) => `<div class="sec"><h3>${t(h)}${count ? `<span class="pill">${fmtN(count)}</span>` : ''}</h3>${body}</div>`;
 const nodata = s => `<p class="nodata">${t(s)}</p>`;
@@ -696,9 +760,9 @@ async function openWork(k){
 
 function workHTML(w, d){
   const m = marks[w.k] || {}, src = img(w, true), k = esc(w.k), tt = d?.titles || {};
-  const titles = [[t('한국어'), tt.ko || w.ko, ''], ['日本語', tt.ja || w.ja, 'ja'], ['English', tt.en || w.en, ''], ['Romaji', w.r, '']].filter(x => x[1]);
+  const titles = [[t('한국어'), w._koEd ? w.ko : tt.ko || w.ko, ''], ['日本語', tt.ja || w.ja, 'ja'], ['English', tt.en || w.en, ''], ['Romaji', w.r, '']].filter(x => x[1]);
   let h = `<div class="shead">${src ? `<img src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="imgFallback(this)">` : '<div class="ph"></div>'}
-    <div><h2 class="${S.lang === 'ja' ? 'ja' : ''}">${titleHTML(w)}</h2><dl class="tl">${titles.map(([l, v, c]) => `<dt>${l}</dt><dd class="${c}">${esc(v)}</dd>`).join('')}</dl></div></div>
+    <div><h2 class="${S.lang === 'ja' ? 'ja' : ''}">${titleHTML(w)}</h2>${ADMIN ? `<button class="adm" data-act="editw" data-k="${k}">${t('수정')}</button>` : ''}<dl class="tl">${titles.map(([l, v, c]) => `<dt>${l}</dt><dd class="${c}">${esc(v)}</dd>`).join('')}</dl></div></div>
     <div class="sacts"><button class="tg w ${m.w ? 'on' : ''}" data-act="w" data-k="${k}">${t('봤음')}</button><button class="tg i ${m.i ? 'on' : ''}" data-act="i" data-k="${k}">${t('관심')}</button></div>
     <div class="sprog">${progCtl(w)}${whereCtl(w)}</div>`;
 
@@ -807,8 +871,8 @@ async function openPerson(id){
   const p = await item('people', id);
   usedAuto = false;
   if (!p) { showSheet(sec('인물 정보 없음', nodata('이 인물의 출연·참여 정보가 아직 수집되지 않았습니다.'))); return; }
-  const n = p.name, pf = p.profile || {};
-  let h = `<div class="shead" style="grid-template-columns:${pf.image ? '84px ' : ''}1fr">${pf.image ? `<img class="pf" src="${esc(pf.image)}" alt="" referrerpolicy="no-referrer">` : ''}<div><h2>${nm({...n, ja: null})}</h2><div class="s" style="color:var(--sub)">${esc([n.ja, n.en].filter(Boolean).join(' / '))}</div></div></div>`;
+  const n = pEdit(p.name, id), pf = p.profile || {}; editorP = p.name;
+  let h = `<div class="shead" style="grid-template-columns:${pf.image ? '84px ' : ''}1fr">${pf.image ? `<img class="pf" src="${esc(pf.image)}" alt="" referrerpolicy="no-referrer">` : ''}<div><h2>${nm({...n, ja: null})}</h2>${ADMIN ? `<button class="adm" data-act="editp" data-p="${esc(id)}">${t('수정')}</button>` : ''}<div class="s" style="color:var(--sub)">${esc([n.ja, n.en].filter(Boolean).join(' / '))}</div></div></div>`;
   const ko = S.lang === 'ko', bd = (pf.birth_iso || '').split('-').map(Number);
   // birth_iso는 「1990-09-27」 또는 연도를 모르면 「09-27」
   const birth = !pf.birth_iso ? pf.birth : ko ? (bd.length === 3 ? `${bd[0]}년 ${bd[1]}월 ${bd[2]}일` : bd.length === 2 ? `${bd[0]}월 ${bd[1]}일` : `${bd[0]}년`) : S.lang === 'ja' ? (bd.length === 3 ? `${bd[0]}年${bd[1]}月${bd[2]}日` : bd.length === 2 ? `${bd[0]}月${bd[1]}日` : `${bd[0]}年`)
