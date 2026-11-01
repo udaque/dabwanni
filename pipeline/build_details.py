@@ -35,6 +35,14 @@ def _base_n(t):
     t = re.sub(r'[\s〈〉《》「」『』()（）\[\]&＆・:：~〜\-－!！?？、,，.。]', '', t).lower()
     return re.sub(r'(第\d+(期|クール|シーズン)|\d+(st|nd|rd|th)season|season\d+|part\d+|\d+)+$', '', t)
 
+# 쇼보이 일본어 직책 → AniList(영어) 직책 이름 (role_ko가 한국어로 옮김)
+SY_ROLE = {'原作': 'Original Creator', '監督': 'Director', '総監督': 'Chief Director', '助監督': 'Assistant Director', '副監督': 'Assistant Director',
+           'シリーズ構成': 'Series Composition', '脚本': 'Script', 'キャラクターデザイン': 'Character Design', 'キャラクター原案': 'Original Character Design',
+           '総作画監督': 'Chief Animation Director', '作画監督': 'Animation Director', '美術監督': 'Art Director', '美術設定': 'Art Design', '色彩設計': 'Color Design',
+           '撮影監督': 'Director of Photography', '3DCG監督': 'CG Director', 'CG監督': 'CG Director', '編集': 'Editing', '音響監督': 'Sound Director',
+           '音楽': 'Music', '音響効果': 'Sound Effects', 'プロデューサー': 'Producer', 'アニメーションプロデューサー': 'Animation Producer', 'コンセプトアート': 'Concept Art',
+           'プロップデザイン': 'Prop Design', 'メカニックデザイン': 'Mechanical Design', '絵コンテ': 'Storyboard', '演出': 'Episode Director'}
+
 def SEASON_STRIP(t): return re.sub(r'\s*(\d+\s*기|\d+\s*쿨|시즌\s*\d+|파트\s*\d+)(\s*\d+\s*쿨)?\s*$', '', t or '').strip()
 
 def edu_title(t, w):
@@ -468,11 +476,13 @@ def main():
             rec = {'k': k, 'role': r, 'eps': eps}; people[i]['staff'].append(rec)
             if eps: al_ep_recs.append(rec)
         for s in (sy or {}).get('staff', []):
-            r = role_ko(s['role'])
-            if r in ('애니메이션 제작', '제작', '제작위원회'): continue
-            i = P(s['name'])
-            if i not in staff.get(r, []):
-                staff.setdefault(r, []).append(i); people[i]['staff'].append({'k': k, 'role': r})
+            # 쇼보이 직책은 일본어: 「シリーズ構成・脚本」처럼 묶인 건 나누고, 한국어로 옮기지 못한 직책(掲載誌 등)은 넣지 않음
+            for part in re.split(r'[・/／、,]', s['role'] or ''):
+                r = role_ko(SY_ROLE.get(part.strip(), part.strip()))
+                if not r or r in ('애니메이션 제작', '제작', '제작위원회') or re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', r): continue
+                i = P(s['name'])
+                if i not in staff.get(r, []):
+                    staff.setdefault(r, []).append(i); people[i]['staff'].append({'k': k, 'role': r})
         order = {r: n for n, r in enumerate(STAFF_ORDER)}
         if staff: d['staff'] = [{'role': r, 'people': [ref(i) for i in v]} for r, v in sorted(staff.items(), key=lambda t: order.get(t[0], 999))]
 

@@ -250,12 +250,15 @@ function bind(){
   window.addEventListener('hashchange', route);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
   $('#exportBtn').onclick = () => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v:2, marks}, null, 1)], {type:'application/json'}));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v:3, marks, wlog, whereCustom: whereCustom()}, null, 1)], {type:'application/json'})      // 시청 기록·직접 추가한 시청처도 함께);
     a.download = 'dabwanni-marks.json'; a.click();
   };
   $('#importFile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { const d = JSON.parse(await f.text()); Object.assign(marks, d.marks || {}); save(); render(); alert(t('체크 기록을 불러왔습니다.')); }
+    try { const d = JSON.parse(await f.text()); Object.assign(marks, d.marks || {}); save();
+      if (Array.isArray(d.wlog)) { const seen = new Set(wlog.map(x => x.join('|'))); for (const x of d.wlog) if (!seen.has(x.join('|'))) wlog.push(x); wlog.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0); store.set('wlog', wlog); }
+      if (Array.isArray(d.whereCustom)) store.set('whereCustom', [...new Set([...whereCustom(), ...d.whereCustom])]);
+      render(); alert(t('체크 기록을 불러왔습니다.')); }
     catch { alert(t('파일 형식이 맞지 않습니다. 이 사이트에서 내보낸 파일을 선택하세요.')); }
   };
 }
