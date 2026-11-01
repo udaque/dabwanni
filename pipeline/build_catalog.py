@@ -370,6 +370,8 @@ for g in groups.values():
         m['rel'] = m['rel'] + [x for x in o['rel'] if x not in m['rel']]
         m['tags'] = m['tags'] + [t for t in o['tags'] if t not in m['tags']]
         m.setdefault('_alias', []).append(o['k']); m['_syn'] = m.get('_syn', []) + o.get('_syn', [])
+    # 형식이 갈리면 TV 쪽: AniList는 웹(ONA)인데 MAL·AniDB는 TV인 작품은 대개 TV 방송과 웹 배포를 같이 한 작품(「領民0人スタートの辺境領主様」)
+    if m.get('ty') == 'O' and any(o.get('ty') == 'T' for o in rs[1:]): m['ty'] = 'T'
     merged.append(m)
 for r in merged:
     # 뮤직비디오: 대표 항목이 뮤직비디오이고 스페셜·웹·미분류·뮤직이면 형식을 P로
