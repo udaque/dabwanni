@@ -29,13 +29,43 @@
   function txt(el) { return (el && (el.textContent || '') || '').replace(/\s+/g, ' ').trim(); }
   function abs(u) { if (!u) return ''; if (u.indexOf('//') === 0) return 'https:' + u; if (u.indexOf('http') === 0) return u; return ''; }
   function sectionOf(el, doc) {
-    // 위로 올라가며 앞쪽 형제들에서 묶음 이름(전자책·알라딘 배송·중고 …)을 찾음
+    // 상품 링크에서 위로 올라가며, 앞쪽 형제들 중 짧은 묶음 이름(품절·전자책·알라딘 배송·중고 …)을 찾음
     var cur = el;
-    for (var depth = 0; cur && depth < 12; depth++, cur = cur.parentElement) {
+    for (var depth = 0; cur && depth < 16; depth++, cur = cur.parentElement) {
       var p = cur.previousElementSibling, n = 0;
-      while (p && n < 30) { var tx = txt(p); if (tx && tx.length < 40 && SECT.test(tx)) return tx.replace(/\s*\d+\s*$/, ''); p = p.previousElementSibling; n++; }
+      while (p && n < 40) {
+        var tx = txt(p), m = tx.match(SECT);
+        if (m && tx.length <= 30 && !/원|\d{2,}/.test(tx.replace(/\(\d+\)|\d+$/, ''))) return secName(p, tx);
+        p = p.previousElementSibling; n++;
+      }
     }
     return '';
+  }
+  // 묶음 이름: 머리 줄 안의 글자 칸(label·strong·span 등) 중 묶음 이름이 든 가장 짧은 것 (「접기」 같은 버튼 글자 빼기)
+  function secName(el, tx) {
+    var best = '', cands = el.querySelectorAll('label, strong, b, span, h2, h3, h4, p, div');
+    for (var i = 0; i < cands.length; i++) { var c = txt(cands[i]); if (c && SECT.test(c) && (!best || c.length < best.length)) best = c; }
+    best = (best || tx).replace(/\s*(접기|펼치기|전체\s*선택|선택\s*삭제|삭제)\s*/g, ' ').replace(/\s*\(?\d+\)?\s*$/, '').trim();
+    return /품절|절판/.test(best) ? '품절·절판' : best;
+  }
+  // 장바구니의 「함께 구매한 상품」·추천 같은 칸은 장바구니 상품이 아님: 체크 상자가 있는 칸만, 추천 제목 아래는 뺌
+  var NOTCART = /함께\s*구매|추천|최근\s*본|이\s*상품을\s*구매|많이\s*구매/;
+  function inCart(a) {
+    var cur = a;
+    for (var d = 0; cur && d < 8; d++, cur = cur.parentElement) {
+      if (cur.querySelector && cur.querySelector('input[type="checkbox"]')) {
+        var cbs = cur.querySelectorAll('input[type="checkbox"]'); if (cbs.length <= 2) return true;      // 상품 한 칸(체크 상자 1~2개)
+      }
+    }
+    return false;
+  }
+  function underRecommend(a) {
+    var cur = a;
+    for (var d = 0; cur && d < 16; d++, cur = cur.parentElement) {
+      var p = cur.previousElementSibling, n = 0;
+      while (p && n < 10) { var tx = txt(p); if (tx && tx.length < 60 && NOTCART.test(tx)) return true; p = p.previousElementSibling; n++; }
+    }
+    return false;
   }
   function parse(doc) {
     var out = [], seen = {};
@@ -51,6 +81,7 @@
     var links = doc.querySelectorAll('a[href*="ItemId="], a[href*="itemid="], a[href*="ItemID="]');
     for (var j = 0; j < links.length; j++) {
       var a = links[j], mm = (a.getAttribute('href') || '').match(/item[iI][dD]=(\d+)/i); if (!mm || seen[mm[1]]) continue;
+      if (mode === 'cart' && (underRecommend(a) || !inCart(a))) continue;
       var cell = a.closest('li, tr, .item, [class*="item"], [class*="Item"], [class*="cart"], [class*="basket"]') || a.parentElement;
       var tTxt = txt(a) || (a.querySelector('img') && a.querySelector('img').getAttribute('alt')) || '';
       if (!tTxt || tTxt.length < 2) { var t2 = cell && cell.querySelector('[class*="title"], [class*="tit"], strong, b'); tTxt = txt(t2); }
@@ -60,7 +91,7 @@
       // 가격: 「5,000원」만 들어 있는 칸에서 (제목 끝 숫자와 붙어 읽히지 않게)
       var price = '', leaves = cell ? cell.querySelectorAll('*') : [];
       for (var q = 0; q < leaves.length && !price; q++) { var lt = txt(leaves[q]); if (leaves[q].children.length === 0 && /^[\d,]+\s*원/.test(lt)) price = lt.match(/^([\d,]+)/)[1]; }
-      out.push({ id: mm[1], t: tTxt.replace(/^\d+\.\s*/, ''), cover: abs(im && im.getAttribute('src')), pub: '', buy: '', price: price ? +price.replace(/,/g, '') : 0, sec: mode === 'cart' ? sectionOf(cell || a, doc) : '' });
+      out.push({ id: mm[1], t: tTxt.replace(/^\d+\.\s*/, ''), cover: abs(im && im.getAttribute('src')), pub: '', buy: '', price: price ? +price.replace(/,/g, '') : 0, sec: mode === 'cart' ? sectionOf(a, doc) : '' });
     }
     return out;
   }
@@ -90,7 +121,7 @@
     }).catch(function () { return { k: '' }; });
   }
 
-  var items = [], payload = null;
+  var items = [], payload = null, stopEarly = false;
   function run() {
     closeBtn.remove();
     msg.textContent = '목록을 읽는 중…';
@@ -99,33 +130,38 @@
     if (mode === 'purchase') {
       // 다음 쪽이 있으면 이어서 읽음 (새 상품이 안 나오면 멈춤)
       var loop = function (p) {
-        if (p > 60) return Promise.resolve();
-        var u = new URL(location.href); u.searchParams.set('page', p);
+        if (p > 2000) return Promise.resolve();
+        var u = new URL(location.href); u.searchParams.set('page', p); if (rows) u.searchParams.set('ViewRowsCount', rows);
         return fetch(u.toString(), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
           var doc = new DOMParser().parseFromString(h, 'text/html'), got = parse(doc), have = {}, add = 0;
           all.forEach(function (x) { have[x.id] = 1; }); got.forEach(function (x) { if (!have[x.id]) { all.push(x); add++; } });
           pages = p; msg.textContent = '목록을 읽는 중… ' + p + '쪽, ' + all.length + '권';
-          if (add) return sleep(800).then(function () { return loop(p + 1); });
+          if (add) return sleep(600).then(function () { return loop(p + 1); });
         });
       };
-      next = loop(2);
+      // 한 쪽에 50권씩 보이게 해 보고, 되면 그 설정으로 끝까지 (안 되면 기본 20권씩)
+      var rows = 0;
+      var u1 = new URL(location.href); u1.searchParams.set('page', 1); u1.searchParams.set('ViewRowsCount', 50);
+      next = fetch(u1.toString(), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
+        var got = parse(new DOMParser().parseFromString(h, 'text/html'));
+        if (got.length > all.length) { rows = 50; var have = {}; all.forEach(function (x) { have[x.id] = 1; }); got.forEach(function (x) { if (!have[x.id]) all.push(x); }); }
+      }).catch(function () {}).then(function () { return loop(2); });
     }
     next.then(function () {
       if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
-      var i = 0;
-      var step = function () {
-        if (i >= all.length) return Promise.resolve();
-        var x = all[i++]; msg.textContent = '책 정보를 확인하는 중… ' + i + ' / ' + all.length;
-        var had = !!cache[x.id];
-        return detail(x.id).then(function (d) {
-          if (d.t) x.t = x.t || d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec) ? 1 : 0;
-          x.kind = d.k || (d.adult ? 'c' : '');
-          return had ? null : sleep(500);
-        }).then(step);
+      var i = 0, done = 0;
+      var fill = function (x, d) { if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec) ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); };
+      // 책 정보는 3개씩 동시에 확인 (이미 확인한 책은 기억해 둔 것을 씀). 도중에 「지금까지 보내기」 가능
+      row.innerHTML = ''; btn('지금까지 보내기', false, function () { stopEarly = true; });
+      var worker = function () {
+        if (stopEarly || i >= all.length) return Promise.resolve();
+        var x = all[i++], had = !!cache[x.id];
+        return detail(x.id).then(function (d) { fill(x, d); done++; msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + (Object.keys(cache).length ? ' (기억해 둔 책은 빠르게 지나갑니다)' : ''); return had ? null : sleep(250); }).then(worker);
       };
-      return step().then(function () {
+      return Promise.all([worker(), worker(), worker()]).then(function () {
+        if (stopEarly) all = all.filter(function (x) { return 'kind' in x; });
         items = all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; });
-        msg.textContent = '전체 ' + all.length + '권 중 만화·라이트노벨 ' + items.length + '권을 찾았습니다.';
+        msg.textContent = (stopEarly ? '여기까지 확인한 ' : '전체 ') + all.length + '권 중 만화·라이트노벨 ' + items.length + '권을 찾았습니다.';
         row.innerHTML = '';
         if (!items.length) { finish(); return; }
         btn('다봤니로 보내기', true, send); btn('닫기', false, function () { box.remove(); window.__dwBM = null; });

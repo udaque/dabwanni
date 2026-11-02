@@ -108,7 +108,7 @@ function renderCart(){
   let h = guideHTML('ccart');
   if (!CM.carts.length) return h + `<div class="stbox"><p class="stempty">${t('아직 백업한 장바구니가 없습니다.')}</p></div>`;
   const i = Math.min(CMS.cart, CM.carts.length - 1), c = CM.carts[i];
-  h += `<div class="cmrow">${CM.carts.length > 1 ? `<div class="fscroll cmsnap">${CM.carts.map((x, j) => `<button class="chip ${j === i ? 'on' : ''}" data-cm="snap" data-v="${j}">${esc(new Date(x.at).toLocaleString('ko-KR', {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'}))}</button>`).join('')}</div>` : `<span class="setnote">${esc(new Date(c.at).toLocaleString('ko-KR'))} ${t('백업')}</span>`}</div>`;
+  h += `<div class="cmrow">${CM.carts.length > 1 ? `<div class="fscroll cmsnap">${CM.carts.map((x, j) => `<button class="chip ${j === i ? 'on' : ''}" data-cm="snap" data-v="${j}">${esc(new Date(x.at).toLocaleString('ko-KR', {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'}))}</button>`).join('')}</div>` : `<span class="setnote">${esc(new Date(c.at).toLocaleString('ko-KR'))} ${t('백업')}</span>`}<button class="cmdel" data-cm="snapdel" data-v="${i}">${t('이 백업 지우기')}</button></div>`;
   for (const sec of c.sections) {
     if (!sec.items.length) continue;
     h += `<h2 class="gh">${esc(sec.name || t('기타'))}<span class="pill">${fmtN(sec.items.length)}</span></h2><div class="rows cmcart">${sec.items.map(it => `<a class="cmrowi" href="https://www.aladin.co.kr/m/mproduct.aspx?ItemId=${esc(it.id)}" target="_blank" rel="noopener">
@@ -144,6 +144,7 @@ document.addEventListener('click', e => {
   if (a === 'bmcopy') { navigator.clipboard?.writeText(BM_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
   if (a === 'kind' || a === 'view' || a === 'sort') { CMS[a] = el.dataset.v; store.set('cm' + a[0].toUpperCase() + a.slice(1), CMS[a]); return cmRender(S.tab); }
   if (a === 'snap') { CMS.cart = +el.dataset.v; return cmRender(S.tab); }
+  if (a === 'snapdel') { if (!confirm(t('이 장바구니 백업을 지울까요?'))) return; CM.carts.splice(+el.dataset.v, 1); CMS.cart = 0; cmSave(); return cmRender(S.tab); }
   const st = (CM.series[k] ||= {});
   if (a === 'read+' || a === 'read-') { const s = seriesList().find(x => x.key === k); st.read = Math.max(0, Math.min((s?.max || 999), (st.read || 0) + (a === 'read+' ? 1 : -1))); st.u = Date.now(); cmSave(); return cmRender(S.tab); }
   if (a === 'ack') { const s = seriesList().find(x => x.key === k); st.ack = s.gaps.join(','); st.u = Date.now(); cmSave(); return cmRender(S.tab); }

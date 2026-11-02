@@ -381,3 +381,4 @@ html{touch-action:manipulation}
 .cmrowi .ck{color:var(--want);font-style:normal}
 .cmsheet .rows{max-height:60vh;overflow:auto;margin:8px 0 12px}
 .cmsnap{flex:1}
+.cmdel{flex:none;height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--sub);font-size:13px;font-weight:600;white-space:nowrap;margin-left:auto}
