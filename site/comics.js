@@ -44,12 +44,19 @@ function parseTitle(t){
     if (m && SEP_ED.test(m[1]) && /\d\s*권?$/.test(c.slice(0, m.index))) { sep = m[1]; c = c.slice(0, m.index).trim(); continue; }
     break;
   }
-  let vol = null, base = c;
+  let vol = null, base = c, vols = null;
+  // 여러 권 묶음: 「야마다 군과 Lv999의 사랑을 하다 1~3권 특별판」 → 1·2·3권
+  const rg = c.match(/^(.*?\S)\s*(\d{1,3})\s*[~∼～]\s*(\d{1,3})\s*권?$/);
+  if (rg && +rg[2] < +rg[3] && +rg[3] - +rg[2] < 60) {
+    vols = []; for (let v = +rg[2]; v <= +rg[3]; v++) vols.push(v);
+    const r0 = {base: (sep && !rg[1].includes(sep) ? `${rg[1]} ${sep}` : rg[1]).trim(), vol: +rg[3], vols, ed};
+    PT_CACHE.set(t, r0); return r0;
+  }
   let m = c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
   if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
   else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
   if (sep && !base.includes(sep)) base = `${base} ${sep}`;
-  const r = {base: base || c || String(t || ''), vol, ed};
+  const r = {base: base || c || String(t || ''), vol, vols: vol ? [vol] : [], ed};
   PT_CACHE.set(t, r); return r;
 }
 const cleanTitle = t => parseTitle(t).base;
@@ -74,8 +81,8 @@ function seriesList(){
     if (!it.own) continue;
     const k = seriesKey(it); let s = S_.get(k);
     if (!s) S_.set(k, s = {key: k, name: baseOf(it.t), pub: it.pub || '', kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
-    const pv = parseTitle(it.t).vol; it.vol = pv; it.ed = parseTitle(it.t).ed;
-    s.items.push(it); if (it.vol) s.vols.add(it.vol); if (it.eb) s.eb = true;
+    const pt = parseTitle(it.t); it.vol = pt.vol; it.vols = pt.vols; it.ed = pt.ed;
+    s.items.push(it); it.vols.forEach(v => s.vols.add(v)); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
   }
   for (const s of S_.values()) {
@@ -195,7 +202,7 @@ function cmOpen(key){
     ${s.ext.length ? `<div class="cmext"><span class="setnote">${t('다른 곳에서 삼')}</span><div class="pills">${s.ext.map(v => `<button class="chip ext" data-cmx="del" data-v="${v}">${esc(F('volN', v))} ✕</button>`).join('')}</div></div>` : ''}
     <div class="rows">${s.items.map(it => `<a class="cmrowi" href="https://www.aladin.co.kr/m/mproduct.aspx?ItemId=${esc(it.id)}" target="_blank" rel="noopener">
       <span class="cover">${it.cover ? `<img src="${esc(it.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}${it.eb ? '<span class="ebtag">e-book</span>' : ''}</span>
-      <span class="grow"><b>${esc(it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([it.date && F('pubOn', it.date), it.buy && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
+      <span class="grow"><b>${esc(it.vols && it.vols.length > 1 ? F('volN', `${it.vols[0]}~${it.vols[it.vols.length - 1]}`) : it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([it.date && F('pubOn', it.date), it.buy && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
     <div class="ebtns"><button class="ecancel">${t('닫기')}</button></div></div>`;
   document.body.appendChild(box);
   box.querySelector('.ecancel').onclick = () => box.remove();
