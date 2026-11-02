@@ -15,25 +15,38 @@ function korNum(w){
   if (!m || (!m[1] && !m[2])) return null;
   return (m[1] ? KN10[m[1]] : 0) + (m[2] ? KN1[m[2]] : 0);
 }
-function cleanTitle(t){
-  return String(t || '').replace(/^\s*(\[[^\]]*\]\s*)+/, '')      // [eBook] [고화질] 같은 앞 표시
-    .replace(/\s+-\s+.*$/, '')                                   // 「… 5 - 시프트코믹스」 뒤 부제·총서명
-    .replace(/\s*\((?:[^()]*?(?:판|한정|특전|세트|부록|포함|에디션|edition)[^()]*)\)\s*$/i, '')   // (특장판) (한정판) …
-    .trim();
+// 판 표시: 같은 권의 다른 판(그 권으로 침) / 번호 체계가 따로인 판(별도 시리즈)
+const SAME_ED = /^(특별판|한정판|특장판|초판\s*한정판?|초회\s*한정판?|일반판|부록판|스페셜\s*에디션|리미티드\s*에디션|한정\s*특장판|특전판|세트)$/;
+const SEP_ED = /^(애장판|완전판|소장판|개정판|신장판|와이드판|합본판?|무삭제판?|컬러판|풀컬러판?)$/;
+const PT_CACHE = new Map();
+function parseTitle(t){
+  if (PT_CACHE.has(t)) return PT_CACHE.get(t);
+  let c = String(t || '').replace(/^\s*(\[[^\]]*\]\s*)+/, '')       // [eBook] [고화질] 같은 앞 표시
+    .replace(/\s+-\s+.*$/, '').trim();                               // 「… 5 - 시프트코믹스」 뒤 부제·총서명
+  let ed = '', sep = '';
+  for (let guard = 0; guard < 6; guard++) {
+    let m = c.match(/\s*\(([^()]*)\)\s*$/);                          // 끝의 괄호: (특장판) (너블특선판) …
+    if (m) {
+      const w = m[1].trim();
+      if (SEP_ED.test(w)) sep = w; else if (SAME_ED.test(w) || /판|한정|특전|세트|부록|포함|에디션|edition/i.test(w)) ed = ed || w; else break;
+      c = c.slice(0, m.index).trim(); continue;
+    }
+    m = c.match(/\s(\S+)$/);                                          // 괄호 없는 끝 낱말: 「단다단 18 특별판」
+    if (m && SAME_ED.test(m[1])) { ed = ed || m[1]; c = c.slice(0, m.index).trim(); continue; }
+    if (m && SEP_ED.test(m[1]) && /\d\s*권?$/.test(c.slice(0, m.index))) { sep = m[1]; c = c.slice(0, m.index).trim(); continue; }
+    break;
+  }
+  let vol = null, base = c;
+  let m = c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
+  if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
+  else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
+  if (sep && !base.includes(sep)) base = `${base} ${sep}`;
+  const r = {base: base || c || String(t || ''), vol, ed};
+  PT_CACHE.set(t, r); return r;
 }
-function volOf(t){
-  const c = cleanTitle(t);
-  let m = c.match(/(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/(\d{1,3})$/);
-  if (m) return +m[1];
-  m = c.match(/\s(\S+)$/); if (m) { const k = korNum(m[1]); if (k) return k; }
-  return null;
-}
-function baseOf(t){
-  let c = cleanTitle(t);
-  c = c.replace(/\s*(?:제\s*)?\d{1,3}\s*권$/, '').replace(/[\s.(]\s*\d{1,3}\s*\)?$/, '').replace(/(\D)\d{1,3}$/, '$1');
-  const m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) c = m[1];
-  return c.trim() || cleanTitle(t);
-}
+const cleanTitle = t => parseTitle(t).base;
+const volOf = t => parseTitle(t).vol;
+const baseOf = t => parseTitle(t).base;
 const seriesKey = it => norm(baseOf(it.t));
 // 빠진 권 표시: 이어지는 번호는 묶음 (1, 2, 3, 5 → 「1~3, 5」)
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
@@ -47,14 +60,16 @@ function seriesList(){
     if (!it.own) continue;
     const k = seriesKey(it); let s = S_.get(k);
     if (!s) S_.set(k, s = {key: k, name: baseOf(it.t), pub: it.pub || '', kind: it.kind, items: [], vols: new Set(), eb: false, date: '', buy: ''});
+    const pv = parseTitle(it.t).vol; it.vol = pv; it.ed = parseTitle(it.t).ed;
     s.items.push(it); if (it.vol) s.vols.add(it.vol); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
     if (it.kind === 'l') s.kind = 'l';
   }
   for (const s of S_.values()) {
     s.items.sort((a, b) => (a.vol || 0) - (b.vol || 0) || String(a.date).localeCompare(String(b.date)));
-    s.max = Math.max(0, ...s.vols); s.gaps = [];
-    for (let v = 1; v < s.max; v++) if (!s.vols.has(v)) s.gaps.push(v);
+    const ext = new Set((CM.series[s.key] || {}).ext || []); s.ext = [...ext].sort((a, b) => a - b);      // 다른 곳에서 산 권
+    s.max = Math.max(0, ...s.vols, ...ext); s.gaps = [];
+    for (let v = 1; v < s.max; v++) if (!s.vols.has(v) && !ext.has(v)) s.gaps.push(v);
     const last = s.items[s.items.length - 1]; s.cover = last.cover; s.pub = last.pub || s.pub;
     const st = CM.series[s.key] || {}; s.read = st.read || 0; s.ack = st.ack === s.gaps.join(',');
   }
@@ -160,13 +175,23 @@ function cmOpen(key){
   const s = seriesList().find(x => x.key === key); if (!s) return;
   const box = document.createElement('div'); box.id = 'editor';
   box.innerHTML = `<div class="ebox cmsheet" role="dialog" aria-modal="true"><h3>${esc(s.name)}</h3><p class="setnote">${esc([s.pub, s.kind === 'l' ? t('라이트노벨') : t('만화')].join(' · '))}</p>
-    ${s.gaps.length ? `<p class="cmwarn ${s.ack ? 'acked' : ''}">${esc(F('missingVols', ranges(s.gaps)))}</p>` : ''}
+    ${s.gaps.length ? `<p class="cmwarn ${s.ack ? 'acked' : ''}">${esc(F('missingVols', ranges(s.gaps)))}</p>
+      <div class="cmext"><span class="setnote">${t('다른 곳에서 산 권을 누르세요')}</span><div class="pills">${s.gaps.map(v => `<button class="chip" data-cmx="add" data-v="${v}">${esc(F('volN', v))}</button>`).join('')}${s.gaps.length > 1 ? `<button class="chip on" data-cmx="all">${esc(F('allMissing', ranges(s.gaps)))}</button>` : ''}</div></div>` : ''}
+    ${s.ext.length ? `<div class="cmext"><span class="setnote">${t('다른 곳에서 삼')}</span><div class="pills">${s.ext.map(v => `<button class="chip ext" data-cmx="del" data-v="${v}">${esc(F('volN', v))} ✕</button>`).join('')}</div></div>` : ''}
     <div class="rows">${s.items.map(it => `<a class="cmrowi" href="https://www.aladin.co.kr/m/mproduct.aspx?ItemId=${esc(it.id)}" target="_blank" rel="noopener">
       <span class="cover">${it.cover ? `<img src="${esc(it.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}${it.eb ? '<span class="ebtag">e-book</span>' : ''}</span>
-      <span class="grow"><b>${esc(it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([it.date && F('pubOn', it.date), it.buy && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
+      <span class="grow"><b>${esc(it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([it.date && F('pubOn', it.date), it.buy && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
     <div class="ebtns"><button class="ecancel">${t('닫기')}</button></div></div>`;
   document.body.appendChild(box);
-  box.querySelector('.ecancel').onclick = () => box.remove(); box.onclick = e => { if (e.target === box) box.remove(); };
+  box.querySelector('.ecancel').onclick = () => box.remove();
+  box.onclick = e => {
+    if (e.target === box) return box.remove();
+    const b = e.target.closest('[data-cmx]'); if (!b) return;
+    const st = (CM.series[key] ||= {}), ext = new Set(st.ext || []), v = +b.dataset.v;
+    if (b.dataset.cmx === 'add') ext.add(v); if (b.dataset.cmx === 'del') ext.delete(v); if (b.dataset.cmx === 'all') s.gaps.forEach(x => ext.add(x));
+    st.ext = [...ext].sort((a, b2) => a - b2); st.u = Date.now(); cmSave();
+    box.remove(); cmOpen(key); cmRender(S.tab);
+  };
 }
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-cm]'); if (!el || !$('#comics') || !$('#comics').contains(el)) return;

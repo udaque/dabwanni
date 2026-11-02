@@ -390,3 +390,8 @@ html{touch-action:manipulation}
 .cmrowi{max-width:100%;min-width:0;box-sizing:border-box}
 .cmrowi b,.cmrowi .s,.cmrowi .cmwarn{overflow-wrap:anywhere;word-break:break-word;white-space:normal}
 .cmcard .t1,.cmcard .t2{overflow-wrap:anywhere}
+.cmext{margin:8px 0}
+.cmext .pills{margin-top:6px;gap:6px}
+.cmext .chip{height:32px}
+.cmext .chip.ext{color:var(--sub)}
+.pill.edtag{font-size:11px;padding:1px 7px;vertical-align:middle}
