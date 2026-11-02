@@ -194,6 +194,7 @@ html{touch-action:manipulation}
 
 /* 설정 탭 */
 .tabs button.tabset{margin-left:auto;color:var(--want)}
+.tabs button.tabmode{color:var(--watching)}
 .tabs button.tabset2{color:var(--want)}
 .tabs button.tabset2.on{color:var(--want);border-bottom-color:var(--want)}
 .tabs button.tabset.on{color:var(--want);border-bottom-color:var(--want)}
@@ -354,3 +355,29 @@ html{touch-action:manipulation}
 /* 상세 화면 태그 버튼 */
 .pill.tagbtn{border:0;font:inherit;font-size:13px;cursor:pointer;color:inherit}
 .pill.tagbtn:active{opacity:.7}
+
+/* 만화책 */
+.comics{padding:0 0 40px}
+.cmguide{padding:12px 16px}
+.cmgh{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;background:none;color:var(--ink);font-size:16px;padding:4px 0}
+.cmsteps{margin:10px 0 12px;padding-left:20px;color:var(--sub);font-size:14px;line-height:1.6}
+.cmsteps a{color:var(--want);word-break:break-all}
+.bmlink{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:8px;background:var(--onair);color:#fff;font-weight:700;text-decoration:none;white-space:nowrap}
+.cmctl{margin:6px 0 4px}
+.cmrow{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.cmseg{flex:1 1 auto}
+.cmcard .cover{position:relative}
+.ebtag{position:absolute;right:6px;bottom:6px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,.78);color:#fff;font-size:11px;font-weight:700;letter-spacing:.2px}
+.cmwarn{margin:6px 0 2px;font-size:13px;font-weight:700;color:var(--onair);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cmwarn.acked{color:var(--sub);font-weight:500}
+.cmwarn button{height:26px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font-size:12px;white-space:nowrap}
+.cmread{margin-top:8px}
+.cmrowi{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none}
+.cmrowi .cover{position:relative;flex:none;width:48px;height:68px;border-radius:6px;overflow:hidden;background:var(--chip)}
+.cmrowi .cover img{width:100%;height:100%;object-fit:cover}
+.cmrowi .ebtag{right:2px;bottom:2px;font-size:9px;padding:1px 4px}
+.cmrowi .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.cmrowi b{font-size:14px}.cmrowi .s{font-size:12px;color:var(--sub)}
+.cmrowi .ck{color:var(--want);font-style:normal}
+.cmsheet .rows{max-height:60vh;overflow:auto;margin:8px 0 12px}
+.cmsnap{flex:1}

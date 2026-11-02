@@ -29,7 +29,10 @@
     <button data-i18n="탭:보는 중" data-tab="watching">보는 중</button>
     <button data-i18n="탭:봤음" data-tab="watched">봤음</button>
     <button data-i18n="탭:관심" data-tab="want">관심</button>
-    <button data-i18n="탭:기록" data-tab="stats" class="tabset">기록</button>
+    <button data-i18n="탭:구매" data-tab="cbuy" class="ctab" hidden>구매</button>
+    <button data-i18n="탭:장바구니" data-tab="ccart" class="ctab" hidden>장바구니</button>
+    <button id="modeBtn" class="tabset tabmode">만화책</button>
+    <button data-i18n="탭:기록" data-tab="stats" class="tabset2">기록</button>
     <button data-i18n="탭:설정" data-tab="settings" class="tabset2">설정</button>
   </nav>
 </header>
@@ -43,6 +46,7 @@
   <div class="filters" id="filters"></div>
   <div id="list"><div class="spin" role="status" aria-label="불러오는 중" data-i18n-aria="불러오는 중"></div></div>
   <div id="more" class="more"></div>
+  <section id="comics" class="comics" hidden></section>
   <section id="stats" class="stats" hidden></section>
   <section id="settings" class="settings" hidden>
     <div class="setsec">
@@ -100,5 +104,6 @@
 </footer>
 <script src="i18n.js"></script>
 <script src="app.js"></script>
+<script src="comics.js"></script>
 </body>
 </html>

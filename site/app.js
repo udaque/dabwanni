@@ -35,7 +35,7 @@ const wlog = store.get('wlog', []);
 const TOMB = store.get('syncTomb', {m: {}, l: {}});         // 지운 작품·지운 시청 기록과 그 시각 (동기화에서 되살아나지 않게)
 const SNAP = new Map(Object.entries(marks).map(([k, m]) => [k, JSON.stringify(m, (key, v) => key === 'u' ? undefined : v)]));
 const tombLog = e => { if (e) { TOMB.l[e.join('|')] = Date.now(); store.set('syncTomb', TOMB); } };   // 시청 기록 [[날짜, 작품, 화], …]   // {k: {w,i,ep,rate,memo,re,start,end}}
-const S = { tagf:new Set(), tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
+const S = { mode:'anime', tagf:new Set(), tab:'season', epHide:store.get('epHide', true), theme:store.get('theme', 'system'), lang:(l => ['ko', 'ja', 'en'].includes(l) ? l : l === 'r' ? 'en' : 'ko')(store.get('lang', 'ko')), q:'', y:2026, qq:4, types:new Set(), lens:new Set(), shown:PAGE };
 
 /* ---------- 데이터 ---------- */
 function fnv(s){ let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h % NB; }
@@ -168,6 +168,9 @@ async function boot(){
   $('#totalPill').textContent = F('count', fmtN(W.length));
   bind(); route(); render();
   loadEdits(); initSync();
+  if (location.hash === '#comics-import') { history.replaceState('', '', location.pathname + location.search); setMode('comic'); }
+  else if (store.get('mode', 'anime') === 'comic') setMode('comic');
+  else $('#modeBtn').textContent = t('만화책');
 }
 /* ---------- 구글 드라이브 동기화 (픽픽과 같은 방식) ----------
    드라이브의 앱 전용 숨김 공간에 파일 하나(dabwanni-sync.json). 작품별로 마지막에 바뀐 쪽을 고르고, 지운 것은 지운 시각으로 판단 */
@@ -202,6 +205,7 @@ async function syncNow(manual){
     const id = list.files?.[0]?.id;
     const remote = id ? await (await gApi(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).json().catch(() => ({})) : {};
     const merged = mergeSync({marks, wlog, tomb: TOMB, whereCustom: whereCustom()}, remote);
+    if (typeof cmMerge === 'function') { merged.comics = cmMerge(CM, remote.comics || {}); Object.assign(CM, merged.comics); store.set('comics', CM); }
     // 이 기기에 반영
     for (const k of Object.keys(marks)) if (!merged.marks[k]) delete marks[k];
     Object.assign(marks, merged.marks); SNAP.clear(); for (const [k, m] of Object.entries(marks)) SNAP.set(k, markSig(m));
@@ -307,11 +311,25 @@ function openEditor(scope, id){
 }
 let editorP = null;
 
+/* ---------- 애니 ↔ 만화책 ---------- */
+const ANIME_TABS = ['season', 'all', 'watching', 'watched', 'want'], COMIC_TABS = ['cbuy', 'ccart'];
+function setMode(mode, tab){
+  S.mode = mode; store.set('mode', mode);
+  document.querySelectorAll('.tabs button[data-tab]').forEach(b => { if (ANIME_TABS.includes(b.dataset.tab)) b.hidden = mode === 'comic'; if (COMIC_TABS.includes(b.dataset.tab)) b.hidden = mode !== 'comic'; });
+  $('#modeBtn').textContent = t(mode === 'comic' ? '애니' : '만화책');
+  $('#q').placeholder = t(mode === 'comic' ? '만화책 검색' : '작품·인물·제작사 검색');
+  S.tab = tab || (mode === 'comic' ? store.get('cmTab', 'cbuy') : 'season'); S.shown = PAGE;
+  document.querySelectorAll('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === S.tab));
+  if (typeof closeSheet === 'function' && !$('#sheet').hidden) closeSheet();
+  render(); window.scrollTo(0, 0);
+}
+
 /* ---------- 이벤트 ---------- */
 function bind(){
-  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
-    S.tab = b.dataset.tab; S.shown = PAGE;
-    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('#modeBtn').onclick = () => setMode(S.mode === 'comic' ? 'anime' : 'comic');
+  document.querySelectorAll('.tabs button[data-tab]').forEach(b => b.onclick = () => {
+    S.tab = b.dataset.tab; S.shown = PAGE; if (COMIC_TABS.includes(S.tab)) store.set('cmTab', S.tab);
+    document.querySelectorAll('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x === b));
     render(); window.scrollTo(0, 0);
   });
   let t; $('#q').oninput = e => {
@@ -742,6 +760,9 @@ function render(){
   const settingsMode = S.tab === 'settings' && !S.q, statsMode = S.tab === 'stats' && !S.q;
   $('#settings').hidden = !settingsMode;
   $('#stats').hidden = !statsMode;
+  const comicView = S.mode === 'comic' && !settingsMode && !statsMode;
+  $('#comics').hidden = !comicView;
+  if (comicView) { ['#filters', '#list', '#more', '#seasonBar'].forEach(s => $(s).hidden = true); cmRender(S.tab); return; }
   ['#filters', '#list', '#more'].forEach(s => $(s).hidden = settingsMode || statsMode);
   if (statsMode) { $('#seasonBar').hidden = true; renderStats(); return; }
   if (settingsMode) {
