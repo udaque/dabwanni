@@ -49,7 +49,13 @@ function parseTitle(t){
 const cleanTitle = t => parseTitle(t).base;
 const volOf = t => parseTitle(t).vol;
 const baseOf = t => parseTitle(t).base;
-const seriesKey = it => norm(baseOf(it.t)) + '|' + (it.kind === 'l' ? 'l' : 'c');      // 같은 제목이라도 만화판·라이트노벨판은 따로
+// 분류: 알라딘 장르를 저장해 둔 책은 여기서 계산 (만화 계열 장르가 하나라도 있으면 만화), 없으면 가져올 때 정한 값
+function kindOf(it){
+  if (it.g == null) return it.kind === 'l' ? 'l' : 'c';
+  const g = it.g, isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
+  return isC ? 'c' : isL ? 'l' : 'c';
+}
+const seriesKey = it => norm(baseOf(it.t)) + '|' + kindOf(it);      // 같은 제목이라도 만화판·라이트노벨판은 따로
 // 빠진 권 표시: 이어지는 번호는 묶음 (1, 2, 3, 5 → 「1~3, 5」)
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
 
@@ -61,11 +67,10 @@ function seriesList(){
   for (const it of Object.values(CM.items)) {
     if (!it.own) continue;
     const k = seriesKey(it); let s = S_.get(k);
-    if (!s) S_.set(k, s = {key: k, name: baseOf(it.t), pub: it.pub || '', kind: it.kind, items: [], vols: new Set(), eb: false, date: '', buy: ''});
+    if (!s) S_.set(k, s = {key: k, name: baseOf(it.t), pub: it.pub || '', kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
     const pv = parseTitle(it.t).vol; it.vol = pv; it.ed = parseTitle(it.t).ed;
     s.items.push(it); if (it.vol) s.vols.add(it.vol); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
-    if (it.kind === 'l') s.kind = 'l';
   }
   for (const s of S_.values()) {
     s.items.sort((a, b) => (a.vol || 0) - (b.vol || 0) || String(a.date).localeCompare(String(b.date)));
@@ -222,7 +227,8 @@ window.addEventListener('message', e => {
   if (!ALADIN.includes(e.origin) || !d || d.type !== 'dabwanni-aladin' || !Array.isArray(d.items)) return;
   const now = Date.now(); let added = 0;
   const pick = x => ({id: String(x.id), t: String(x.t || '').slice(0, 300), cover: /^https:\/\//.test(x.cover || '') ? x.cover : '', pub: String(x.pub || '').slice(0, 80),
-    date: String(x.date || '').slice(0, 10), kind: x.kind === 'l' ? 'l' : 'c', eb: x.eb ? 1 : 0, price: +x.price || 0});
+    date: String(x.date || '').slice(0, 10), kind: x.kind === 'l' ? 'l' : 'c', eb: x.eb ? 1 : 0, price: +x.price || 0,
+    ...(x.g != null ? {g: String(x.g).slice(0, 300)} : {}), ...(x.f != null ? {f: String(x.f).slice(0, 80)} : {})});
   if (d.kind === 'purchase') {
     for (const x of d.items) { if (!x.id) continue; const it = pick(x), old = CM.items[it.id]; if (!old) added++;
       CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; }

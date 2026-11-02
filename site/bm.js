@@ -165,7 +165,7 @@
     }
     if (!stopNow) saveProg({ mode: 'purchase', done: true, lastPage: 0, rows: rows, items: all.map(slim), at: Date.now() });
   }
-  function fill(x, d) { if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
+  function fill(x, d) { x.g = d.g; x.f = d.f; if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
   var picked = function () { return all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; }); };
   function workingButtons() {
     row.innerHTML = '';
@@ -197,7 +197,7 @@
   }
   // 보내기: 중간에 보내도 확인은 계속되고, 다 끝나면 마지막으로 한 번 더 보내면 됨 (다봤니 쪽은 겹치지 않게 합침)
   function send(final) {
-    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec }; });
+    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f }; });
     if (!items.length) { msg.textContent = '아직 보낼 만화·라이트노벨이 없습니다.'; return; }
     var w = window.open(DW + '/#comics-import', 'dabwanni'), payload;
     if (mode === 'cart') {
