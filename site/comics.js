@@ -26,6 +26,12 @@ function parseTitle(t){
   let ed = '', sep = '';
   const plus = c.split(/\s+\+\s+/);                                   // 두 권 묶음: 「사카모토 데이즈 16 + 소설 사카모토 데이즈」 → 앞 책 기준, 「세트」 꼬리표
   if (plus.length > 1 && plus[0].trim()) { c = plus[0].trim(); ed = '세트'; }
+  // 닫히지 않은 끝 괄호(알라딘이 긴 제목을 잘라 「… 12 (초판한정 일러스트 포스트 카드」처럼 온 경우)
+  let um = c.match(/\s*\(([^()]*)$/);
+  if (um) { if (/판|한정|특전|세트|부록|포함|에디션|카드/.test(um[1])) ed = ed || um[1].trim().replace(/\s.*$/, ''); c = c.slice(0, um.index).trim(); }
+  // 권 번호 뒤 「 : 부제」 (「사카모토 데이즈 21 : ASAKURA DIYS」) → 부제 떼기
+  um = c.match(/^(.*\S)\s+(\d{1,3})\s*권?\s*[:：]\s+\S.*$/);
+  if (um) c = `${um[1]} ${um[2]}`;
   for (let guard = 0; guard < 6; guard++) {
     let m = c.match(/\s*\(([^()]*)\)\s*$/);                          // 끝의 괄호: (특장판) (너블특선판) …
     if (m) {
