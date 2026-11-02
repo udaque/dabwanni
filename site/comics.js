@@ -83,18 +83,30 @@ function seriesCard(s){
       <span class="now">${s.read}<small> / ${esc(F('volN', s.max || s.items.length))}</small></span>
       <button class="step" data-cm="read+" data-k="${esc(s.key)}" aria-label="${t('읽은 권 더하기')}">+</button></div></div>`;
 }
+// 이름표가 붙은 한 줄짜리 고르기 (종류·보기·정렬을 줄마다 나눠 구분되게)
+function chipRow(label, name, cur, opts){
+  return `<div class="frow"><span class="flab">${t(label)}</span><div class="fscroll">${opts.map(([v, l, n]) => `<button class="chip ${cur === v ? 'on' : ''}" data-cm="${name}" data-v="${v}">${t(l)}${n != null ? `<span class="pill">${fmtN(n)}</span>` : ''}</button>`).join('')}</div></div>`;
+}
 function seg(name, cur, opts){ return `<div class="seg cmseg">${opts.map(([v, l]) => `<button data-cm="${name}" data-v="${v}" class="${cur === v ? 'on' : ''}">${t(l)}</button>`).join('')}</div>`; }
 function renderBuy(q){
   let L = seriesList();
   const counts = {all: L.length, c: L.filter(s => s.kind !== 'l').length, l: L.filter(s => s.kind === 'l').length};
   if (CMS.kind !== 'all') L = L.filter(s => (CMS.kind === 'l') === (s.kind === 'l'));
   if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub).includes(nq)); }
+  const gapN = L.filter(s => s.gaps.length).length;
   L.sort(CMS.sort === 'date' ? (a, b) => b.date.localeCompare(a.date) || tcmpS(a, b) : tcmpS);
   let h = guideHTML('cbuy');
   if (!Object.keys(CM.items).length) return h + `<div class="stbox"><p class="stempty">${t('아직 가져온 구매내역이 없습니다.')}</p></div>`;
   h += `<div class="cmctl">
     <div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${[['all', '전체'], ['c', '만화'], ['l', '라이트노벨']].map(([v, l]) => `<button class="chip ${CMS.kind === v ? 'on' : ''}" data-cm="kind" data-v="${v}">${t(l)}<span class="pill">${fmtN(counts[v])}</span></button>`).join('')}</div></div>
-    <div class="cmrow">${seg('view', CMS.view, [['all', '전체'], ['pub', '출판사별']])}${seg('sort', CMS.sort, [['name', '이름순'], ['date', '발매일순']])}</div></div>`;
+    ${chipRow('보기', 'view', CMS.view, [['all', '전체'], ['pub', '출판사별'], ['gap', '빠진 권 있음', gapN]])}
+    ${chipRow('정렬', 'sort', CMS.sort, [['name', '이름순'], ['date', '발매일순']])}</div>`;
+  if (CMS.view === 'gap') {
+    const G = L.filter(s => s.gaps.length); CMQ = [];
+    return h + `<h2 class="gh">${t('빠진 권 있음')}<span class="pill">${fmtN(G.length)}</span></h2>` + (G.length ? `<div class="rows cmgaps">${G.map(s => `<button class="cmrowi" data-cm="open" data-k="${esc(s.key)}">
+      <span class="cover">${s.cover ? `<img src="${esc(s.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${s.eb ? '<span class="ebtag">e-book</span>' : ''}</span>
+      <span class="grow"><b>${esc(s.name)}</b><span class="s">${esc([s.pub, F('ownedTo', s.max)].filter(Boolean).join(' · '))}</span><span class="cmwarn ${s.ack ? 'acked' : ''}">${s.ack ? '' : '⚠ '}${esc(F('missingVols', ranges(s.gaps)))}</span></span></button>`).join('')}</div>` : `<div class="stbox"><p class="stempty">${t('빠진 권이 있는 시리즈가 없습니다.')}</p></div>`);
+  }
   // 그릴 순서(머리 줄·카드)만 만들어 두고, 실제 그리기는 스크롤에 맞춰 조금씩 (전부 보여 줌)
   CMQ = [];
   if (CMS.view === 'pub') {
