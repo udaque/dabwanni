@@ -121,68 +121,97 @@
     }).catch(function () { return { k: '' }; });
   }
 
-  var items = [], payload = null, stopEarly = false;
-  function run() {
-    closeBtn.remove();
-    msg.textContent = '목록을 읽는 중…';
-    var all = parse(document), pages = 1;
-    var next = Promise.resolve();
-    if (mode === 'purchase') {
-      // 다음 쪽이 있으면 이어서 읽음 (새 상품이 안 나오면 멈춤)
-      var loop = function (p) {
-        if (p > 2000) return Promise.resolve();
-        var u = new URL(location.href); u.searchParams.set('page', p); if (rows) u.searchParams.set('ViewRowsCount', rows);
-        return fetch(u.toString(), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
-          var doc = new DOMParser().parseFromString(h, 'text/html'), got = parse(doc), have = {}, add = 0;
-          all.forEach(function (x) { have[x.id] = 1; }); got.forEach(function (x) { if (!have[x.id]) { all.push(x); add++; } });
-          pages = p; msg.textContent = '목록을 읽는 중… ' + p + '쪽, ' + all.length + '권';
-          if (add) return sleep(600).then(function () { return loop(p + 1); });
-        });
-      };
-      // 한 쪽에 50권씩 보이게 해 보고, 되면 그 설정으로 끝까지 (안 되면 기본 20권씩)
-      var rows = 0;
-      var u1 = new URL(location.href); u1.searchParams.set('page', 1); u1.searchParams.set('ViewRowsCount', 50);
-      next = fetch(u1.toString(), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
-        var got = parse(new DOMParser().parseFromString(h, 'text/html'));
-        if (got.length > all.length) { rows = 50; var have = {}; all.forEach(function (x) { have[x.id] = 1; }); got.forEach(function (x) { if (!have[x.id]) all.push(x); }); }
-      }).catch(function () {}).then(function () { return loop(2); });
+  // ---------- 진행 저장: 구매내역 목록을 읽은 쪽과 목록을 알라딘 쪽에 저장해 두고, 다시 누르면 거기서 이어서 ----------
+  var PK = 'dwbm_progress_v1';
+  function loadProg() { try { return JSON.parse(localStorage.getItem(PK) || 'null'); } catch (e) { return null; } }
+  function saveProg(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch (e) {} }
+  var slim = function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, sec: x.sec, price: x.price }; };
+  var all = [], working = false, stopNow = false;
+
+  async function readList() {
+    if (mode !== 'purchase') { all = parse(document); return; }
+    var prog = loadProg(), start = 2, rows = 0, known = null;
+    if (prog && prog.mode === 'purchase' && !prog.done && prog.items && prog.items.length) {
+      all = prog.items; start = prog.lastPage + 1; rows = prog.rows || 0;
+      msg.textContent = '지난번에 ' + prog.lastPage + '쪽까지 읽었습니다. ' + start + '쪽부터 이어서 읽습니다.';
+    } else {
+      all = parse(document);
+      if (prog && prog.done && prog.items) { known = {}; prog.items.forEach(function (x) { known[x.id] = 1; }); }
+      // 한 쪽에 50권씩 보이는지 시험
+      try {
+        var u1 = new URL(location.href); u1.searchParams.set('page', 1); u1.searchParams.set('ViewRowsCount', 50);
+        var got1 = parse(new DOMParser().parseFromString(await (await fetch(u1.toString(), { credentials: 'include' })).text(), 'text/html'));
+        if (got1.length > all.length) { rows = 50; var h0 = {}; all.forEach(function (x) { h0[x.id] = 1; }); got1.forEach(function (x) { if (!h0[x.id]) all.push(x); }); }
+      } catch (e) {}
     }
-    next.then(function () {
-      if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
-      var i = 0, done = 0;
-      var fill = function (x, d) { if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec) ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); };
-      // 책 정보는 3개씩 동시에 확인 (이미 확인한 책은 기억해 둔 것을 씀). 도중에 「지금까지 보내기」 가능
-      row.innerHTML = ''; btn('지금까지 보내기', false, function () { stopEarly = true; });
-      var worker = function () {
-        if (stopEarly || i >= all.length) return Promise.resolve();
-        var x = all[i++], had = !!cache[x.id];
-        return detail(x.id).then(function (d) { fill(x, d); done++; msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + (Object.keys(cache).length ? ' (기억해 둔 책은 빠르게 지나갑니다)' : ''); return had ? null : sleep(250); }).then(worker);
-      };
-      return Promise.all([worker(), worker(), worker()]).then(function () {
-        if (stopEarly) all = all.filter(function (x) { return 'kind' in x; });
-        items = all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; });
-        msg.textContent = (stopEarly ? '여기까지 확인한 ' : '전체 ') + all.length + '권 중 만화·라이트노벨 ' + items.length + '권을 찾았습니다.';
-        row.innerHTML = '';
-        if (!items.length) { finish(); return; }
-        btn('다봤니로 보내기', true, send); btn('닫기', false, function () { box.remove(); window.__dwBM = null; });
-      });
-    });
+    for (var p = start; p <= 5000 && !stopNow; p++) {
+      var u = new URL(location.href); u.searchParams.set('page', p); if (rows) u.searchParams.set('ViewRowsCount', rows);
+      var got = parse(new DOMParser().parseFromString(await (await fetch(u.toString(), { credentials: 'include' })).text(), 'text/html'));
+      var have = {}, add = 0, fresh = 0; all.forEach(function (x) { have[x.id] = 1; });
+      got.forEach(function (x) { if (!have[x.id]) { all.push(x); add++; } if (known && !known[x.id]) fresh++; });
+      msg.textContent = '목록을 읽는 중… ' + p + '쪽, ' + all.length + '권 (중간에 멈춰도 다음에 이어서 읽습니다)';
+      saveProg({ mode: 'purchase', done: false, lastPage: p, rows: rows, items: all.map(slim), at: Date.now() });
+      if (!add) break;
+      if (known && !fresh) {                                  // 지난번에 끝까지 읽었으면, 새로 산 책이 안 나오는 쪽에서 멈추고 지난 목록과 합침
+        var h2 = {}; all.forEach(function (x) { h2[x.id] = 1; }); prog.items.forEach(function (x) { if (!h2[x.id]) all.push(x); });
+        break;
+      }
+      await sleep(600);
+    }
+    if (!stopNow) saveProg({ mode: 'purchase', done: true, lastPage: 0, rows: rows, items: all.map(slim), at: Date.now() });
   }
-  function send() {
-    var w = window.open(DW + '/#comics-import', 'dabwanni');
+  function fill(x, d) { if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
+  var picked = function () { return all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; }); };
+  function workingButtons() {
+    row.innerHTML = '';
+    btn('지금까지 보내기', true, function () { send(false); });
+    btn('멈추기', false, function () { stopNow = true; });
+  }
+  async function run() {
+    closeBtn.remove(); working = true; workingButtons();
+    msg.textContent = '목록을 읽는 중…';
+    await readList();
+    if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
+    if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
+    var i = 0, done = 0;
+    var worker = async function () {
+      while (!stopNow && i < all.length) {
+        var x = all[i++], had = !!cache[x.id];
+        fill(x, await detail(x.id)); done++;
+        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)';
+        if (!had) await sleep(250);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    working = false;
+    var items = picked();
+    msg.textContent = (stopNow ? '멈췄습니다. 여기까지 확인한 ' + done + '권' : '전체 ' + all.length + '권') + ' 중 만화·라이트노벨 ' + items.length + '권' + (stopNow ? '. 다시 누르면 이어서 진행합니다.' : '을 찾았습니다.');
+    row.innerHTML = '';
+    if (items.length) btn('다봤니로 보내기', true, function () { send(true); });
+    btn('닫기', false, function () { box.remove(); window.__dwBM = null; });
+  }
+  // 보내기: 중간에 보내도 확인은 계속되고, 다 끝나면 마지막으로 한 번 더 보내면 됨 (다봤니 쪽은 겹치지 않게 합침)
+  function send(final) {
+    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec }; });
+    if (!items.length) { msg.textContent = '아직 보낼 만화·라이트노벨이 없습니다.'; return; }
+    var w = window.open(DW + '/#comics-import', 'dabwanni'), payload;
     if (mode === 'cart') {
       var secs = [], idx = {};
       items.forEach(function (x) { var n = x.sec || '기타'; if (!(n in idx)) { idx[n] = secs.length; secs.push({ name: n, items: [] }); } secs[idx[n]].items.push(x); });
       payload = { type: 'dabwanni-aladin', kind: 'cart', items: items, sections: secs };
     } else payload = { type: 'dabwanni-aladin', kind: 'purchase', items: items };
-    row.innerHTML = ''; msg.textContent = '보내는 중… (' + items.length + '권)';
-    var tries = 0, timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg.textContent = '전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'; row.innerHTML = ''; btn('다시 보내기', true, send); } }, 500);
+    var keep = msg.textContent; msg.textContent = '보내는 중… (' + items.length + '권)';
+    var tries = 0, timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg.textContent = '전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'; } }, 500);
     window.addEventListener('message', function onAck(e) {
       if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;
       clearInterval(timer); window.removeEventListener('message', onAck);
-      msg.textContent = '보냈습니다. ' + (mode === 'cart' ? '장바구니 ' + e.data.added + '권을 백업했습니다.' : '새로 들어간 책 ' + e.data.added + '권.'); finish();
+      var note = mode === 'cart' ? '장바구니 ' + e.data.added + '권을 백업했습니다.' : '새로 들어간 책 ' + e.data.added + '권.';
+      if (working) { msg.textContent = '보냈습니다. ' + note + ' 계속 확인하는 중입니다.'; workingButtons(); }
+      else { msg.textContent = '보냈습니다. ' + note; finish(); }
     });
   }
   msg.textContent = mode === 'cart' ? '이 장바구니의 만화·라이트노벨을 다봤니에 백업합니다.' : '구매내역의 만화·라이트노벨을 모두 읽어 다봤니로 가져옵니다. 쪽이 많으면 몇 분 걸릴 수 있습니다.';
+  var pr = loadProg();
+  if (mode === 'purchase' && pr && !pr.done && pr.items && pr.items.length) msg.textContent = '지난번에 목록을 ' + pr.lastPage + '쪽까지 읽었습니다. 「시작」을 누르면 이어서 진행합니다.';
   btn('시작', true, run);
 })();
