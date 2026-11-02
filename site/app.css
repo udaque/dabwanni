@@ -385,3 +385,8 @@ html{touch-action:manipulation}
 .cmmore{height:1px}
 .cmgaps .cmrowi{width:100%;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;font:inherit}
 .cmgaps .cmwarn{margin:2px 0 0}
+/* 만화책 목록 줄: 긴 제목(띄어쓰기 없는 영문·일본어 등)이 줄을 넓히지 않게 줄바꿈, 화면 밖으로 밀리지 않게 */
+.comics{max-width:100%;overflow-x:clip}
+.cmrowi{max-width:100%;min-width:0;box-sizing:border-box}
+.cmrowi b,.cmrowi .s,.cmrowi .cmwarn{overflow-wrap:anywhere;word-break:break-word;white-space:normal}
+.cmcard .t1,.cmcard .t2{overflow-wrap:anywhere}
