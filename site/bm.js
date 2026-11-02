@@ -101,7 +101,8 @@
   try { cache = JSON.parse(localStorage.getItem(CK) || '{}'); } catch (e) {}
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function detail(id) {
-    if (cache[id]) return Promise.resolve(cache[id]);
+    // 예전에 라이트노벨로 분류해 둔 책은 장르를 다시 읽어 재분류 (만화인데 라이트노벨 분류도 같이 걸린 책이 있었음)
+    if (cache[id] && !(cache[id].k === 'l' && cache[id].g === undefined)) return Promise.resolve(cache[id]);
     return fetch('/m/mproduct.aspx?ItemId=' + id, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
       var d = { k: '' };
       var ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
@@ -111,7 +112,11 @@
             var we = (o.workExample || [])[0] || {}, g = String(o.genre || ''), f = String(we.bookFormat || '');
             d.t = o.name || ''; d.cover = o.image || ''; d.pub = (o.publisher && o.publisher.name) || ''; d.date = we.datePublished || '';
             d.eb = /EBook/i.test(f) ? 1 : 0;
-            d.k = /라이트\s*노벨|라노벨|라이트노벨/.test(g) ? 'l' : (/GraphicNovel/i.test(f) || /만화|코믹|웹툰|그래픽노블|BL|순정|소년|소녀|청년/.test(g)) ? 'c' : '';
+            d.g = g; d.f = f;
+            // 알라딘은 라이트노벨도 형태가 GraphicNovel이라 형태로는 못 가름. 장르에 만화 계열이 하나라도 있으면 만화(만화판에 라이트노벨 분류가 같이 붙는 경우),
+            // 라이트노벨만 있으면 라이트노벨, 둘 다 없고 형태가 GraphicNovel이면 만화
+            var isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
+            d.k = isC ? 'c' : isL ? 'l' : /GraphicNovel/i.test(f) ? 'c' : '';
           }
         } catch (e) {}
       }

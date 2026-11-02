@@ -24,6 +24,8 @@ function parseTitle(t){
   let c = String(t || '').replace(/^\s*(\[[^\]]*\]\s*)+/, '')       // [eBook] [고화질] 같은 앞 표시
     .replace(/\s+-\s+.*$/, '').trim();                               // 「… 5 - 시프트코믹스」 뒤 부제·총서명
   let ed = '', sep = '';
+  const plus = c.split(/\s+\+\s+/);                                   // 두 권 묶음: 「사카모토 데이즈 16 + 소설 사카모토 데이즈」 → 앞 책 기준, 「세트」 꼬리표
+  if (plus.length > 1 && plus[0].trim()) { c = plus[0].trim(); ed = '세트'; }
   for (let guard = 0; guard < 6; guard++) {
     let m = c.match(/\s*\(([^()]*)\)\s*$/);                          // 끝의 괄호: (특장판) (너블특선판) …
     if (m) {
@@ -47,7 +49,7 @@ function parseTitle(t){
 const cleanTitle = t => parseTitle(t).base;
 const volOf = t => parseTitle(t).vol;
 const baseOf = t => parseTitle(t).base;
-const seriesKey = it => norm(baseOf(it.t));
+const seriesKey = it => norm(baseOf(it.t)) + '|' + (it.kind === 'l' ? 'l' : 'c');      // 같은 제목이라도 만화판·라이트노벨판은 따로
 // 빠진 권 표시: 이어지는 번호는 묶음 (1, 2, 3, 5 → 「1~3, 5」)
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
 
@@ -67,6 +69,8 @@ function seriesList(){
   }
   for (const s of S_.values()) {
     s.items.sort((a, b) => (a.vol || 0) - (b.vol || 0) || String(a.date).localeCompare(String(b.date)));
+    const old = s.key.replace(/\|[cl]$/, '');
+    if (!CM.series[s.key] && CM.series[old]) CM.series[s.key] = {...CM.series[old]};      // 예전 열쇠(종류 없음)로 저장한 읽은 권·다른 곳에서 산 권 옮김
     const ext = new Set((CM.series[s.key] || {}).ext || []); s.ext = [...ext].sort((a, b) => a - b);      // 다른 곳에서 산 권
     s.max = Math.max(0, ...s.vols, ...ext); s.gaps = [];
     for (let v = 1; v < s.max; v++) if (!s.vols.has(v) && !ext.has(v)) s.gaps.push(v);
