@@ -5,7 +5,7 @@ const CMS = {kind: store.get('cmKind', 'all'), view: store.get('cmView', 'all'),
 const ALADIN = ['https://www.aladin.co.kr', 'https://m.aladin.co.kr'];
 const BUY_URL = 'https://www.aladin.co.kr/m/mbest.aspx?BestType=OrderSave';
 const CART_URL = 'https://www.aladin.co.kr/m/mbasket.aspx?start=moheader';
-function cmSave(){ store.set('comics', CM); if (typeof syncSoon === 'function') syncSoon(); }
+function cmSave(){ SL_CACHE = null; store.set('comics', CM); if (typeof syncSoon === 'function') syncSoon(); }
 
 /* ---------- 제목에서 시리즈 이름과 권수 읽기 ---------- */
 const KN1 = {'하나': 1, '둘': 2, '셋': 3, '넷': 4, '다섯': 5, '여섯': 6, '일곱': 7, '여덟': 8, '아홉': 9};
@@ -39,7 +39,9 @@ const seriesKey = it => norm(baseOf(it.t));
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
 
 /* ---------- 시리즈 묶기 ---------- */
+let SL_CACHE = null;
 function seriesList(){
+  if (SL_CACHE) return SL_CACHE;
   const S_ = new Map();
   for (const it of Object.values(CM.items)) {
     if (!it.own) continue;
@@ -56,7 +58,7 @@ function seriesList(){
     const last = s.items[s.items.length - 1]; s.cover = last.cover; s.pub = last.pub || s.pub;
     const st = CM.series[s.key] || {}; s.read = st.read || 0; s.ack = st.ack === s.gaps.join(',');
   }
-  return [...S_.values()];
+  return (SL_CACHE = [...S_.values()]);
 }
 
 /* ---------- 화면 ---------- */
@@ -93,12 +95,26 @@ function renderBuy(q){
   h += `<div class="cmctl">
     <div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${[['all', '전체'], ['c', '만화'], ['l', '라이트노벨']].map(([v, l]) => `<button class="chip ${CMS.kind === v ? 'on' : ''}" data-cm="kind" data-v="${v}">${t(l)}<span class="pill">${fmtN(counts[v])}</span></button>`).join('')}</div></div>
     <div class="cmrow">${seg('view', CMS.view, [['all', '전체'], ['pub', '출판사별']])}${seg('sort', CMS.sort, [['name', '이름순'], ['date', '발매일순']])}</div></div>`;
-  const grid = arr => `<div class="grid">${arr.map(seriesCard).join('')}</div>`;
+  // 그릴 순서(머리 줄·카드)만 만들어 두고, 실제 그리기는 스크롤에 맞춰 조금씩 (전부 보여 줌)
+  CMQ = [];
   if (CMS.view === 'pub') {
     const G = new Map(); for (const s of L) { const p = s.pub || t('출판사 미상'); if (!G.has(p)) G.set(p, []); G.get(p).push(s); }
-    for (const [p, arr] of [...G].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ko'))) h += `<h2 class="gh">${esc(p)}<span class="pill">${fmtN(arr.length)}</span></h2>` + grid(arr);
-  } else h += `<h2 class="gh">${t('시리즈')}<span class="pill">${fmtN(L.length)}</span></h2>` + grid(L);
-  return h;
+    for (const [p, arr] of [...G].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ko'))) { CMQ.push({h: `<h2 class="gh">${esc(p)}<span class="pill">${fmtN(arr.length)}</span></h2>`}); arr.forEach(s => CMQ.push({s})); }
+  } else { CMQ.push({h: `<h2 class="gh">${t('시리즈')}<span class="pill">${fmtN(L.length)}</span></h2>`}); L.forEach(s => CMQ.push({s})); }
+  return h + '<div id="cmFeed"></div><div id="cmMore" class="cmmore"></div>';
+}
+let CMQ = [], CMQi = 0, CMQobs = null;
+function cmAppend(n){
+  const feed = $('#cmFeed'); if (!feed) return;
+  let grid = feed.lastElementChild && feed.lastElementChild.classList.contains('grid') ? feed.lastElementChild : null, html = '';
+  const flush = () => { if (html) { grid.insertAdjacentHTML('beforeend', html); html = ''; } };
+  for (let k = 0; k < n && CMQi < CMQ.length; CMQi++) {
+    const q = CMQ[CMQi];
+    if (q.h) { if (grid) flush(); feed.insertAdjacentHTML('beforeend', q.h + '<div class="grid"></div>'); grid = feed.lastElementChild; }
+    else { if (!grid) { feed.insertAdjacentHTML('beforeend', '<div class="grid"></div>'); grid = feed.lastElementChild; } html += seriesCard(q.s); k++; }
+  }
+  flush();
+  if (CMQi >= CMQ.length && CMQobs) { CMQobs.disconnect(); CMQobs = null; }
 }
 function tcmpS(a, b){
   const g = s => /^[가-힣]/.test(s) ? 0 : /^[\u3040-\u30ff\u3400-\u9fff]/.test(s) ? 2 : 1;
@@ -120,6 +136,12 @@ function renderCart(){
 function cmRender(tab){
   const box = $('#comics');
   box.innerHTML = tab === 'ccart' ? renderCart() : renderBuy(S.q);
+  if (CMQobs) { CMQobs.disconnect(); CMQobs = null; }
+  if (tab !== 'ccart' && $('#cmFeed')) {
+    CMQi = 0; cmAppend(48);
+    CMQobs = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) cmAppend(48); }, {rootMargin: '1200px 0px'});
+    CMQobs.observe($('#cmMore'));
+  }
   box.querySelectorAll('.fscroll').forEach(el => { const f = () => { el.classList.toggle('fl', el.scrollLeft > 2); el.classList.toggle('fr', el.scrollLeft + el.clientWidth < el.scrollWidth - 2); }; el.onscroll = f; f(); });
 }
 function cmOpen(key){
@@ -146,8 +168,11 @@ document.addEventListener('click', e => {
   if (a === 'snap') { CMS.cart = +el.dataset.v; return cmRender(S.tab); }
   if (a === 'snapdel') { if (!confirm(t('이 장바구니 백업을 지울까요?'))) return; CM.carts.splice(+el.dataset.v, 1); CMS.cart = 0; cmSave(); return cmRender(S.tab); }
   const st = (CM.series[k] ||= {});
-  if (a === 'read+' || a === 'read-') { const s = seriesList().find(x => x.key === k); st.read = Math.max(0, Math.min((s?.max || 999), (st.read || 0) + (a === 'read+' ? 1 : -1))); st.u = Date.now(); cmSave(); return cmRender(S.tab); }
-  if (a === 'ack') { const s = seriesList().find(x => x.key === k); st.ack = s.gaps.join(','); st.u = Date.now(); cmSave(); return cmRender(S.tab); }
+  const s = seriesList().find(x => x.key === k); if (!s) return;
+  if (a === 'read+' || a === 'read-') { st.read = Math.max(0, Math.min((s.max || 999), (st.read || 0) + (a === 'read+' ? 1 : -1))); s.read = st.read; }
+  if (a === 'ack') { st.ack = s.gaps.join(','); s.ack = true; }
+  st.u = Date.now(); store.set('comics', CM); if (typeof syncSoon === 'function') syncSoon();      // 묶음은 그대로라 다시 계산하지 않음
+  const card = el.closest('.cmcard'); if (card) card.outerHTML = seriesCard(s);
 }, true);
 
 /* ---------- 북마클릿에서 받기 ---------- */

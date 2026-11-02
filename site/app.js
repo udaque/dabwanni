@@ -205,7 +205,7 @@ async function syncNow(manual){
     const id = list.files?.[0]?.id;
     const remote = id ? await (await gApi(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).json().catch(() => ({})) : {};
     const merged = mergeSync({marks, wlog, tomb: TOMB, whereCustom: whereCustom()}, remote);
-    if (typeof cmMerge === 'function') { merged.comics = cmMerge(CM, remote.comics || {}); Object.assign(CM, merged.comics); store.set('comics', CM); }
+    if (typeof cmMerge === 'function') { merged.comics = cmMerge(CM, remote.comics || {}); Object.assign(CM, merged.comics); store.set('comics', CM); SL_CACHE = null; }
     // 이 기기에 반영
     for (const k of Object.keys(marks)) if (!merged.marks[k]) delete marks[k];
     Object.assign(marks, merged.marks); SNAP.clear(); for (const [k, m] of Object.entries(marks)) SNAP.set(k, markSig(m));
