@@ -109,29 +109,29 @@
   var CK = 'dwbm_cache_v1', cache = {};
   try { cache = JSON.parse(localStorage.getItem(CK) || '{}'); } catch (e) {}
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  // 상품 정보: PC 상품 페이지에서 구조화 정보(제목·표지·출판사·발매일·장르·형태) + 주제 분류 경로 + 시리즈 번호(전/후속편)를 읽음.
-  // 필요한 부분(분류 경로·시리즈 칸)까지만 받고 나머지는 받지 않음 (데이터 절약). PC 페이지로 읽은 적 없는 책은 한 번 다시 읽음.
+  // 상품 정보 (휴대폰·컴퓨터 똑같이 동작):
+  //  ① 모바일 상품 페이지 앞부분만 받아 구조화 정보(제목·표지·출판사·발매일·장르·형태)와 알라딘 ISBN 코드를 읽고
+  //  ② 그 코드로 상세 정보 조각(getContents detailinfo)을 받아 「이 책의 전/후속편」 목록과 「주제분류」를 읽음.
+  //  시리즈 번호는 전/후속편 목록에 든 상품 번호 중 가장 작은 것 (같은 시리즈의 책은 모두 같은 목록을 보여 줌)
+  //  (휴대폰에서는 PC 상품 페이지 주소가 모바일로 넘어가 버려서 이 방법을 씀)
   var dirty = 0;
   function flushCache(force) { if (force || dirty >= 25) { try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) {} dirty = 0; } }
-  async function readUntilNeeded(url) {
+  async function readUntil(url, enough) {
     var r = await fetch(url, { credentials: 'include' });
     if (!r.body || !r.body.getReader) return await r.text();
     var rd = r.body.getReader(), dec = new TextDecoder(), h = '';
     while (true) {
       var x = await rd.read(); if (x.done) break; h += dec.decode(x.value, { stream: true });
-      var ci = h.indexOf('id="ulCategory"');
-      if (ci >= 0) { var ce = h.indexOf('</ul>', ci); if (ce >= 0 && (h.indexOf('wbookitem.aspx?bookid=') >= 0 || h.length > ce + 15000)) { try { rd.cancel(); } catch (e) {} break; } }
+      if (enough(h)) { try { rd.cancel(); } catch (e) {} break; }
     }
     return h;
   }
+  var liText = function (li) { return (li.match(/>([^<>]+)<\/a>/g) || []).map(function (x) { return x.replace(/<\/a>|>/g, '').trim(); }).filter(Boolean).join(' > '); };
   async function detail(id) {
-    if (cache[id] && cache[id].pc) return cache[id];
-    var d = { k: '', pc: 1 };
+    if (cache[id] && cache[id].mv) return cache[id];
+    var d = { k: '', mv: 1 };
     try {
-      var h = await readUntilNeeded('/shop/wproduct.aspx?ItemId=' + id);
-      var sm = h.match(/wbookitem\.aspx\?bookid=(\d+)/); if (sm) d.sid = sm[1];
-      var ul = h.match(/<ul id="ulCategory">([\s\S]*?)<\/ul>/);
-      if (ul) d.cats = (ul[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(function (li) { return (li.match(/>([^<>]+)<\/a>|<b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/<[^>]+>|>|<\/a/g, '').trim(); }).filter(Boolean).join(' > ').replace(/^국내도서 > /, ''); }).filter(Boolean).slice(0, 4);
+      var h = await readUntil('/m/mproduct.aspx?ItemId=' + id, function (s) { var a = s.indexOf('application/ld+json'); return a >= 0 && s.indexOf('</script>', a) >= 0 && /isbn:\s*"K[0-9A-Z]+"/.test(s); });
       var ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
       for (var i = 0; i < ld.length; i++) {
         try { var o = JSON.parse(ld[i].replace(/^<script[^>]*>|<\/script>$/g, ''));
@@ -139,14 +139,24 @@
             var we = (o.workExample || [])[0] || {}, g = String(o.genre || ''), f = String(we.bookFormat || '');
             d.t = o.name || ''; d.cover = o.image || ''; d.pub = (o.publisher && o.publisher.name) || ''; d.date = we.datePublished || '';
             d.eb = /EBook/i.test(f) ? 1 : 0; d.g = g.slice(0, 80); d.f = f.replace(/^https?:\/\/schema\.org\//, '');
-            // 분류: 주제 분류 경로가 있으면 그걸로(만화 쪽 경로가 하나라도 있으면 만화), 없으면 장르, 없으면 형태
             var isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
             d.k = isC ? 'c' : isL ? 'l' : /GraphicNovel/i.test(f) ? 'c' : '';
-            if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
           }
         } catch (e) {}
       }
       if (!d.t && /19세 이상/.test(h)) { d.adult = 1; var old = cache[id] || {}; ['t', 'cover', 'pub', 'date', 'eb', 'k', 'g'].forEach(function (k2) { if (old[k2] != null && d[k2] == null) d[k2] = old[k2]; }); }
+      var code = (h.match(/isbn:\s*"(K[0-9A-Z]+)"/) || [])[1];
+      if (code) try {      // 상세 조각을 못 받아도 책 정보(분류는 장르로)는 살림
+        var h2 = await (await fetch('/shop/product/getContents.aspx?ISBN=' + code + '&name=detailinfo&type=6&date=15', { credentials: 'include' })).text();
+        var si = h2.indexOf('id="u_series"');
+        if (si >= 0) {
+          var ids = (h2.slice(si, h2.indexOf('</ul>', si)).match(/[Ii]tem[Ii]d=(\d+)/g) || []).map(function (x) { return +x.replace(/\D/g, ''); });
+          if (ids.length) { d.sid = String(Math.min.apply(null, ids)); d.sn = ids.length; }
+        }
+        var ca = h2.match(/<div id="category_all"[^>]*>([\s\S]*?)<\/div>/) || h2.match(/<div id="category_short"[^>]*>([\s\S]*?)<\/div>/);
+        if (ca) d.cats = (ca[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(liText).filter(Boolean).slice(0, 4);
+        if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
+      } catch (e2) { d.mv = 0; }      // 다음에 다시 시도
     } catch (e) { return cache[id] || { k: '' }; }
     cache[id] = d; dirty++; flushCache();
     return d;
@@ -204,7 +214,7 @@
     await readList();
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
     if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
-    var i = 0, done = 0, need = all.filter(function (x) { return !(cache[x.id] && cache[x.id].pc); }).length;
+    var i = 0, done = 0, need = all.filter(function (x) { return !(cache[x.id] && cache[x.id].mv); }).length;
     var worker = async function () {
       while (!stopNow && i < all.length) {
         var x = all[i++], had = !!cache[x.id];
