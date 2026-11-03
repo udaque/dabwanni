@@ -332,11 +332,11 @@ function bind(){
     document.querySelectorAll('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x === b));
     render(); window.scrollTo(0, 0);
   });
-  let t; $('#q').oninput = e => {
+  let qTimer; $('#q').oninput = e => {      // 이름을 t로 하면 번역 함수 t()를 가려 설정의 불러오기 안내가 깨짐
     $('#qClear').hidden = !e.target.value;
-    clearTimeout(t); t = setTimeout(async () => { S.q = e.target.value.trim(); S.shown = PAGE; if (S.q) await loadIdx(); render(); }, 200);
+    clearTimeout(qTimer); qTimer = setTimeout(async () => { S.q = e.target.value.trim(); S.shown = PAGE; if (S.q) await loadIdx(); render(); }, 200);
   };
-  $('#qClear').onclick = () => { clearTimeout(t); $('#q').value = ''; $('#qClear').hidden = true; S.q = ''; S.shown = PAGE; render(); $('#q').focus(); };
+  $('#qClear').onclick = () => { clearTimeout(qTimer); $('#q').value = ''; $('#qClear').hidden = true; S.q = ''; S.shown = PAGE; render(); $('#q').focus(); };
   $('#setLang').onclick = e => { const b = e.target.closest('[data-lang]'); if (!b) return; S.lang = b.dataset.lang; store.set('lang', S.lang); setLogo(); applyLang(); render(); };
   $('#setEpHide').onclick = e => { const b = e.target.closest('[data-ephide]'); if (!b) return; S.epHide = b.dataset.ephide === '1'; store.set('epHide', S.epHide); render(); };
   $('#setTheme').onclick = e => { const b = e.target.closest('[data-theme-set]'); if (!b) return; S.theme = b.dataset.themeSet; store.set('theme', S.theme); applyTheme(); render(); };
@@ -357,6 +357,19 @@ function bind(){
   $('#exportBtn').onclick = () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v:3, marks, wlog, whereCustom: whereCustom()}, null, 1)], {type:'application/json'}));      // 시청 기록·직접 추가한 시청처도 함께
     a.download = 'dabwanni-marks.json'; a.click();
+  };
+  // 만화책 구매내역: 가져온 그대로의 자료(책·시리즈 기록·장바구니 백업)를 파일로
+  $('#cmExportBtn').onclick = () => {
+    const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({v: 1, kind: 'dabwanni-comics', comics: CM}, null, 1)], {type: 'application/json'}));
+    a.download = `dabwanni-comics-${ymd}.json`; a.click();
+  };
+  $('#cmImportFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { const d = JSON.parse(await f.text()), c = d.comics || d; if (!c || typeof c.items !== 'object') throw 0;
+      Object.assign(CM, cmMerge(CM, c)); SL_CACHE = null; store.set('comics', CM); syncSoon(); render(); alert(t('만화책 구매내역을 불러왔습니다.')); }
+    catch { alert(t('파일 형식이 맞지 않습니다. 이 사이트에서 내보낸 파일을 선택하세요.')); }
+    e.target.value = '';
   };
   $('#importFile').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
