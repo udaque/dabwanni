@@ -67,6 +67,15 @@
     }
     return false;
   }
+  // 구매일: 「구매·주문」 근처의 날짜를 먼저, 없으면 칸 안의 날짜. 달·일이 말이 안 되면 버림 (2025-08-45 같은 잘못 읽기 방지)
+  function buyDate(s) {
+    s = s.replace(/\s+/g, ' ');
+    var re = /(20\d\d)\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})(?!\d)/g, m, cands = [];
+    while ((m = re.exec(s))) { var mo = +m[2], d = +m[3]; if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) cands.push({ i: m.index, v: m[1] + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2) }); }
+    if (!cands.length) return '';
+    var k = s.search(/구매|주문/); if (k >= 0) { cands.sort(function (a, b) { return Math.abs(a.i - k) - Math.abs(b.i - k); }); }
+    return cands[0].v;
+  }
   function parse(doc) {
     var out = [], seen = {};
     // 알라딘 모바일 목록 칸 (구매내역·베스트 목록과 같은 틀)
@@ -74,8 +83,8 @@
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i], id = b.getAttribute('itemId') || b.getAttribute('itemid'); if (!id || seen[id]) continue; seen[id] = 1;
       var tt = txt(b.querySelector('.b_book_t')).replace(/^\d+\.\s*/, ''), img = b.querySelector('img.i_cover, img');
-      var pub = txt(b.querySelector('a[href*="PublisherSearch"]')), m = (b.textContent || '').match(/(20\d\d)[.\-년\s]+(\d{1,2})[.\-월\s]+(\d{1,2})/);
-      out.push({ id: id, t: tt, cover: abs(img && (img.getAttribute('src') || '')), pub: pub, buy: m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '', sec: '' });
+      var pub = txt(b.querySelector('a[href*="PublisherSearch"]'));
+      out.push({ id: id, t: tt, cover: abs(img && (img.getAttribute('src') || '')), pub: pub, buy: buyDate(b.textContent || ''), sec: '' });
     }
     // 그 밖의 화면(장바구니 등): 상품 링크마다 가장 가까운 상품 칸에서 제목·표지
     var links = doc.querySelectorAll('a[href*="ItemId="], a[href*="itemid="], a[href*="ItemID="]');

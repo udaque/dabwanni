@@ -68,6 +68,7 @@ function kindOf(it){
   const g = it.g, isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
   return isC ? 'c' : isL ? 'l' : 'c';
 }
+const okDate = d => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(d || '');
 const seriesKey = it => norm(baseOf(it.t)) + '|' + kindOf(it);      // 같은 제목이라도 만화판·라이트노벨판은 따로
 // 빠진 권 표시: 이어지는 번호는 묶음 (1, 2, 3, 5 → 「1~3, 5」)
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
@@ -86,6 +87,12 @@ function seriesList(){
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
   }
   for (const s of S_.values()) {
+    // 번호 없는 책 하나 + 2권부터 번호가 있는 시리즈: 단편으로 나왔다가 후속권이 나온 경우라 그 책을 1권으로 봄
+    const nonum = s.items.filter(it => !it.vols.length);
+    if (nonum.length && s.vols.size && !s.vols.has(1)) {
+      const first = nonum.sort((a, b) => String(a.date).localeCompare(String(b.date)))[0];
+      first.vol = 1; first.vols = [1]; s.vols.add(1);
+    }
     s.items.sort((a, b) => (a.vol || 0) - (b.vol || 0) || String(a.date).localeCompare(String(b.date)));
     const old = s.key.replace(/\|[cl]$/, '');
     if (!CM.series[s.key] && CM.series[old]) CM.series[s.key] = {...CM.series[old]};      // 예전 열쇠(종류 없음)로 저장한 읽은 권·다른 곳에서 산 권 옮김
@@ -202,7 +209,7 @@ function cmOpen(key){
     ${s.ext.length ? `<div class="cmext"><span class="setnote">${t('다른 곳에서 삼')}</span><div class="pills">${s.ext.map(v => `<button class="chip ext" data-cmx="del" data-v="${v}">${esc(F('volN', v))} ✕</button>`).join('')}</div></div>` : ''}
     <div class="rows">${s.items.map(it => `<a class="cmrowi" href="https://www.aladin.co.kr/m/mproduct.aspx?ItemId=${esc(it.id)}" target="_blank" rel="noopener">
       <span class="cover">${it.cover ? `<img src="${esc(it.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}${it.eb ? '<span class="ebtag">e-book</span>' : ''}</span>
-      <span class="grow"><b>${esc(it.vols && it.vols.length > 1 ? F('volN', `${it.vols[0]}~${it.vols[it.vols.length - 1]}`) : it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([it.date && F('pubOn', it.date), it.buy && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
+      <span class="grow"><b>${esc(it.vols && it.vols.length > 1 ? F('volN', `${it.vols[0]}~${it.vols[it.vols.length - 1]}`) : it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([okDate(it.date) && F('pubOn', it.date), okDate(it.buy) && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
     <div class="ebtns"><button class="ecancel">${t('닫기')}</button></div></div>`;
   document.body.appendChild(box);
   box.querySelector('.ecancel').onclick = () => box.remove();
