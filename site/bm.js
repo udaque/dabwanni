@@ -106,16 +106,25 @@
   }
 
   // ---------- 상품 정보 채우기 (장르·출판사·발매일·전자책) ----------
-  var CK = 'dwbm_cache_v1', cache = {};
-  try { cache = JSON.parse(localStorage.getItem(CK) || '{}'); } catch (e) {}
+  // 기억 저장: 예전엔 localStorage에 통째로 넣었는데, 수천 권이면 용량(약 5MB)을 넘어 저장이 조용히 실패했음 → IndexedDB에 책마다 따로
+  var CK = 'dwbm_cache_v1', cache = {}, DB = null, PROG = null, fails = {};
+  function idbOpen() { return new Promise(function (res) { try { var rq = indexedDB.open('dabwanni_bm', 1); rq.onupgradeneeded = function () { rq.result.createObjectStore('c'); rq.result.createObjectStore('p'); }; rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { res(null); }; } catch (e) { res(null); } }); }
+  function put(store, k, v) { if (!DB) return; try { DB.transaction(store, 'readwrite').objectStore(store).put(v, k); } catch (e) {} }
+  async function loadStore() {
+    DB = await idbOpen();
+    if (DB) await new Promise(function (res) { try { var rq = DB.transaction('c').objectStore('c').openCursor(); rq.onsuccess = function (e) { var cur = e.target.result; if (cur) { cache[cur.key] = cur.value; cur.continue(); } else res(); }; rq.onerror = function () { res(); }; } catch (e) { res(); } });
+    try { var old = JSON.parse(localStorage.getItem(CK) || 'null'); if (old) { for (var k in old) if (!cache[k]) { cache[k] = old[k]; put('c', k, old[k]); } if (DB) localStorage.removeItem(CK); } } catch (e) {}
+    if (DB) PROG = await new Promise(function (res) { try { var rq = DB.transaction('p').objectStore('p').get('prog'); rq.onsuccess = function () { res(rq.result || null); }; rq.onerror = function () { res(null); }; } catch (e) { res(null); } });
+    if (!PROG) { try { PROG = JSON.parse(localStorage.getItem('dwbm_progress_v1') || 'null'); } catch (e) {} }
+    if (PROG && DB) { put('p', 'prog', PROG); try { localStorage.removeItem('dwbm_progress_v1'); } catch (e) {} }
+  }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   // 상품 정보 (휴대폰·컴퓨터 똑같이 동작):
   //  ① 모바일 상품 페이지 앞부분만 받아 구조화 정보(제목·표지·출판사·발매일·장르·형태)와 알라딘 ISBN 코드를 읽고
   //  ② 그 코드로 상세 정보 조각(getContents detailinfo)을 받아 「이 책의 전/후속편」 목록과 「주제분류」를 읽음.
   //  시리즈 번호는 전/후속편 목록에 든 상품 번호 중 가장 작은 것 (같은 시리즈의 책은 모두 같은 목록을 보여 줌)
   //  (휴대폰에서는 PC 상품 페이지 주소가 모바일로 넘어가 버려서 이 방법을 씀)
-  var dirty = 0;
-  function flushCache(force) { if (force || dirty >= 25) { try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) {} dirty = 0; } }
+  function flushCache() {}      // 책마다 바로 저장하므로 따로 할 일 없음
   async function readUntil(url, enough) {
     var r = await fetch(url, { credentials: 'include' });
     if (!r.body || !r.body.getReader) return await r.text();
@@ -127,8 +136,10 @@
     return h;
   }
   var liText = function (li) { return (li.match(/>([^<>]+)<\/a>/g) || []).map(function (x) { return x.replace(/<\/a>|>/g, '').trim(); }).filter(Boolean).join(' > '); };
+  function failed(why, old) { fails[why] = (fails[why] || 0) + 1; return { fail: why, old: old }; }
   async function detail(id) {
-    if (cache[id] && cache[id].mv && cache[id].cats) return cache[id];      // 상세 조각까지 읽은 책만 건너뜀
+    var old = cache[id];
+    if (old && old.mv && old.cats) return old;      // 상세 조각까지 읽은 책만 건너뜀
     var d = { k: '', mv: 1 };
     try {
       var h = await readUntil('/m/mproduct.aspx?ItemId=' + id, function (s) { var a = s.indexOf('application/ld+json'); return a >= 0 && s.indexOf('</script>', a) >= 0 && /isbn:\s*"[0-9A-Z]{8,}"/.test(s); });
@@ -158,15 +169,16 @@
         if (ca) d.cats = (ca[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(liText).filter(Boolean).slice(0, 4);
         if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
       } catch (e2) { d.mv = 0; }      // 다음에 다시 시도
-    } catch (e) { return cache[id] || { k: '' }; }
-    cache[id] = d; dirty++; flushCache();
+    } catch (e) { return failed('연결', old); }
+    if (!d.t && !d.adult) return failed('다른 화면', old);      // 정상 상품 화면이 아님 (막힘·오류 화면 등) → 저장하지 않고 다시 시도
+    cache[id] = d; put('c', id, d);
     return d;
   }
 
   // ---------- 진행 저장: 구매내역 목록을 읽은 쪽과 목록을 알라딘 쪽에 저장해 두고, 다시 누르면 거기서 이어서 ----------
   var PK = 'dwbm_progress_v1';
-  function loadProg() { try { return JSON.parse(localStorage.getItem(PK) || 'null'); } catch (e) { return null; } }
-  function saveProg(p) { try { localStorage.setItem(PK, JSON.stringify(p)); } catch (e) {} }
+  function loadProg() { return PROG; }
+  function saveProg(p) { PROG = p; if (DB) put('p', 'prog', p); else { try { localStorage.setItem(PK, JSON.stringify(p)); } catch (e) {} } }
   var slim = function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, sec: x.sec, price: x.price }; };
   var all = [], working = false, stopNow = false;
 
@@ -202,7 +214,9 @@
     }
     if (!stopNow) saveProg({ mode: 'purchase', done: true, lastPage: 0, rows: rows, items: all.map(slim), at: Date.now() });
   }
-  function fill(x, d) { x.g = d.g; x.f = d.f; x.sid = d.sid; x.cats = d.cats; if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
+  function fill(x, d) {
+    if (d.fail) { x.failed = d.fail; if (d.old) { d = d.old; } else return; } else x.failed = '';
+    x.g = d.g; x.f = d.f; x.sid = d.sid; x.cats = d.cats; if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
   var picked = function () { return all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; }); };
   function workingButtons() {
     row.innerHTML = '';
@@ -219,22 +233,36 @@
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
     if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
     var i = 0, done = 0, need = all.filter(function (x) { return !(cache[x.id] && cache[x.id].mv && cache[x.id].cats); }).length;
+    var streak = 0, queue = all.slice(), round = 0;
+    var showing = function () {
+      var left = need - fresh0, sec = fresh0 > 10 ? Math.round((Date.now() - t0) / fresh0 * left / 1000) : 0, nf = all.filter(function (x) { return x.failed; }).length;
+      msg.textContent = (round ? '읽기 실패한 책 다시 시도 중 (' + round + '번째)… ' : '책 정보를 확인하는 중… ' + done + ' / ' + all.length) + ' · 만화·라이트노벨 ' + picked().length + '권' + (nf ? ' · 다시 읽을 책 ' + nf + '권' : '') + (!round && left > 0 ? ' · 새로 읽는 책 ' + left + '권 남음' + (sec ? ', 약 ' + Math.max(1, Math.round(sec / 60)) + '분' : '') : '') + ' · 화면을 켜 둔 채로 두세요';
+    };
     var worker = async function () {
-      while (!stopNow && i < all.length) {
-        var x = all[i++], had = !!cache[x.id];
-        fill(x, await detail(x.id)); done++;
-        if (!had) fresh0++;
-        var left = need - fresh0, sec = fresh0 > 10 ? Math.round((Date.now() - t0) / fresh0 * left / 1000) : 0;
-        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)' + (left > 0 ? ' · 새로 읽는 책 ' + left + '권 남음' + (sec ? ', 약 ' + Math.max(1, Math.round(sec / 60)) + '분' : '') + ' · 화면을 켜 둔 채로 두세요' : '');
-        if (!had) await sleep(100);
+      while (!stopNow && queue.length) {
+        var x = queue.shift(), had = !!(cache[x.id] && cache[x.id].mv && cache[x.id].cats);
+        var d = await detail(x.id); fill(x, d); if (!round) done++;
+        if (!had && !d.fail) fresh0++;
+        if (d.fail) { streak++; if (streak >= 8) { msg.textContent = '알라딘 응답이 원활하지 않아 잠시 쉬었다가 이어서 읽습니다…'; await sleep(20000); streak = 0; } }
+        else streak = 0;
+        showing();
+        if (!had) await sleep(150);
       }
     };
     var t0 = Date.now(), fresh0 = 0;
-    await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
-    flushCache(true);
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시 2개)
+    for (round = 1; round <= 8 && !stopNow; round++) {
+      queue = all.filter(function (x) { return x.failed; }); if (!queue.length) break;
+      msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 ' + (round * 5) + '초 뒤 다시 읽습니다…'; await sleep(round * 5000);
+      await Promise.all([worker(), worker()]);
+    }
+    round = 0;
     working = false; try { wake && wake.release(); } catch (e) {}
     var items = picked();
-    msg.textContent = (stopNow ? '멈췄습니다. 여기까지 확인한 ' + done + '권' : '전체 ' + all.length + '권') + ' 중 만화·라이트노벨 ' + items.length + '권' + (stopNow ? '. 다시 누르면 이어서 진행합니다.' : '을 찾았습니다.');
+    var nf = all.filter(function (x) { return x.failed; }), nfOld = nf.filter(function (x) { return x.kind; }).length, why = Object.keys(fails).map(function (k) { return k + ' ' + fails[k] + '회'; }).join(', ');
+    msg.textContent = (stopNow ? '멈췄습니다. 여기까지 확인한 ' + done + '권' : '전체 ' + all.length + '권') + ' 중 만화·라이트노벨 ' + items.length + '권' + (stopNow ? '. 다시 누르면 이어서 진행합니다.' : '을 찾았습니다.') +
+      (nf.length ? ' 끝내 읽지 못한 책 ' + nf.length + '권(예전 정보로 처리 ' + nfOld + '권)은 다음에 다시 읽습니다. 실패 사유: ' + why : '');
     row.innerHTML = '';
     if (items.length) btn('다봤니로 보내기', true, function () { send(true); });
     btn('닫기', false, function () { box.remove(); window.__dwBM = null; });
@@ -260,7 +288,11 @@
     });
   }
   msg.textContent = mode === 'cart' ? '이 장바구니의 만화·라이트노벨을 다봤니에 백업합니다.' : '구매내역의 만화·라이트노벨을 모두 읽어 다봤니로 가져옵니다. 쪽이 많으면 몇 분 걸릴 수 있습니다.';
-  var pr = loadProg();
-  if (mode === 'purchase' && pr && !pr.done && pr.items && pr.items.length) msg.textContent = '지난번에 목록을 ' + pr.lastPage + '쪽까지 읽었습니다. 「시작」을 누르면 이어서 진행합니다.';
-  btn('시작', true, run);
+  var startMsg = msg.textContent; msg.textContent = '준비하는 중…';
+  loadStore().then(function () {
+    msg.textContent = startMsg;
+    var pr = loadProg();
+    if (mode === 'purchase' && pr && !pr.done && pr.items && pr.items.length) msg.textContent = '지난번에 목록을 ' + pr.lastPage + '쪽까지 읽었습니다. 「시작」을 누르면 이어서 진행합니다.';
+    btn('시작', true, run);
+  });
 })();
