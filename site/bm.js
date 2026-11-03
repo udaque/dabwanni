@@ -109,35 +109,47 @@
   var CK = 'dwbm_cache_v1', cache = {};
   try { cache = JSON.parse(localStorage.getItem(CK) || '{}'); } catch (e) {}
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function detail(id) {
-    // 예전에 라이트노벨로 분류해 둔 책은 장르를 다시 읽어 재분류 (만화인데 라이트노벨 분류도 같이 걸린 책이 있었음)
-    if (cache[id] && !(cache[id].k === 'l' && cache[id].g === undefined && cache[id].cats === undefined)) return Promise.resolve(cache[id]);
-    return fetch('/shop/wproduct.aspx?ItemId=' + id, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
-      var d = { k: '' };
-      // 시리즈 번호(「이 책의 전/후속편」 모두보기의 bookid)와 주제 분류 경로
+  // 상품 정보: PC 상품 페이지에서 구조화 정보(제목·표지·출판사·발매일·장르·형태) + 주제 분류 경로 + 시리즈 번호(전/후속편)를 읽음.
+  // 필요한 부분(분류 경로·시리즈 칸)까지만 받고 나머지는 받지 않음 (데이터 절약). PC 페이지로 읽은 적 없는 책은 한 번 다시 읽음.
+  var dirty = 0;
+  function flushCache(force) { if (force || dirty >= 25) { try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) {} dirty = 0; } }
+  async function readUntilNeeded(url) {
+    var r = await fetch(url, { credentials: 'include' });
+    if (!r.body || !r.body.getReader) return await r.text();
+    var rd = r.body.getReader(), dec = new TextDecoder(), h = '';
+    while (true) {
+      var x = await rd.read(); if (x.done) break; h += dec.decode(x.value, { stream: true });
+      var ci = h.indexOf('id="ulCategory"');
+      if (ci >= 0) { var ce = h.indexOf('</ul>', ci); if (ce >= 0 && (h.indexOf('wbookitem.aspx?bookid=') >= 0 || h.length > ce + 15000)) { try { rd.cancel(); } catch (e) {} break; } }
+    }
+    return h;
+  }
+  async function detail(id) {
+    if (cache[id] && cache[id].pc) return cache[id];
+    var d = { k: '', pc: 1 };
+    try {
+      var h = await readUntilNeeded('/shop/wproduct.aspx?ItemId=' + id);
       var sm = h.match(/wbookitem\.aspx\?bookid=(\d+)/); if (sm) d.sid = sm[1];
       var ul = h.match(/<ul id="ulCategory">([\s\S]*?)<\/ul>/);
-      if (ul) d.cats = (ul[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(function (li) { return (li.match(/>([^<>]+)<\/a>|<b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/<[^>]+>|>|<\/a/g, '').trim(); }).filter(Boolean).join(' > '); }).filter(Boolean);
+      if (ul) d.cats = (ul[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(function (li) { return (li.match(/>([^<>]+)<\/a>|<b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/<[^>]+>|>|<\/a/g, '').trim(); }).filter(Boolean).join(' > ').replace(/^국내도서 > /, ''); }).filter(Boolean).slice(0, 4);
       var ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
       for (var i = 0; i < ld.length; i++) {
         try { var o = JSON.parse(ld[i].replace(/^<script[^>]*>|<\/script>$/g, ''));
           if (o['@type'] === 'Book') {
             var we = (o.workExample || [])[0] || {}, g = String(o.genre || ''), f = String(we.bookFormat || '');
             d.t = o.name || ''; d.cover = o.image || ''; d.pub = (o.publisher && o.publisher.name) || ''; d.date = we.datePublished || '';
-            d.eb = /EBook/i.test(f) ? 1 : 0;
-            d.g = g; d.f = f;
-            // 알라딘은 라이트노벨도 형태가 GraphicNovel이라 형태로는 못 가름. 장르에 만화 계열이 하나라도 있으면 만화(만화판에 라이트노벨 분류가 같이 붙는 경우),
-            // 라이트노벨만 있으면 라이트노벨, 둘 다 없고 형태가 GraphicNovel이면 만화
+            d.eb = /EBook/i.test(f) ? 1 : 0; d.g = g.slice(0, 80); d.f = f.replace(/^https?:\/\/schema\.org\//, '');
+            // 분류: 주제 분류 경로가 있으면 그걸로(만화 쪽 경로가 하나라도 있으면 만화), 없으면 장르, 없으면 형태
             var isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
             d.k = isC ? 'c' : isL ? 'l' : /GraphicNovel/i.test(f) ? 'c' : '';
             if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
           }
         } catch (e) {}
       }
-      if (!d.t && /19세 이상/.test(h)) d.adult = 1;
-      cache[id] = d; try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) {}
-      return d;
-    }).catch(function () { return { k: '' }; });
+      if (!d.t && /19세 이상/.test(h)) { d.adult = 1; var old = cache[id] || {}; ['t', 'cover', 'pub', 'date', 'eb', 'k', 'g'].forEach(function (k2) { if (old[k2] != null && d[k2] == null) d[k2] = old[k2]; }); }
+    } catch (e) { return cache[id] || { k: '' }; }
+    cache[id] = d; dirty++; flushCache();
+    return d;
   }
 
   // ---------- 진행 저장: 구매내역 목록을 읽은 쪽과 목록을 알라딘 쪽에 저장해 두고, 다시 누르면 거기서 이어서 ----------
@@ -192,16 +204,17 @@
     await readList();
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
     if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
-    var i = 0, done = 0;
+    var i = 0, done = 0, need = all.filter(function (x) { return !(cache[x.id] && cache[x.id].pc); }).length;
     var worker = async function () {
       while (!stopNow && i < all.length) {
         var x = all[i++], had = !!cache[x.id];
         fill(x, await detail(x.id)); done++;
-        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)';
+        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)' + (need ? ' · 새로 읽는 책 ' + need + '권이 있어 시간이 걸립니다. 와이파이에서 하세요. 멈춰도 이어집니다.' : '');
         if (!had) await sleep(250);
       }
     };
     await Promise.all([worker(), worker(), worker()]);
+    flushCache(true);
     working = false;
     var items = picked();
     msg.textContent = (stopNow ? '멈췄습니다. 여기까지 확인한 ' + done + '권' : '전체 ' + all.length + '권') + ' 중 만화·라이트노벨 ' + items.length + '권' + (stopNow ? '. 다시 누르면 이어서 진행합니다.' : '을 찾았습니다.');
