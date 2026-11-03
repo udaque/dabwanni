@@ -52,7 +52,7 @@ function parseTitle(t){
     const r0 = {base: (sep && !rg[1].includes(sep) ? `${rg[1]} ${sep}` : rg[1]).trim(), vol: +rg[3], vols, ed};
     PT_CACHE.set(t, r0); return r0;
   }
-  let m = c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
+  let m = c.match(/^(.*?\S)\s*(?:Season|SEASON|season|시즌)\s*(\d{1,3})$/) || c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
   if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
   else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
   if (sep && !base.includes(sep)) base = `${base} ${sep}`;
@@ -64,6 +64,10 @@ const volOf = t => parseTitle(t).vol;
 const baseOf = t => parseTitle(t).base;
 // 분류: 알라딘 장르를 저장해 둔 책은 여기서 계산 (만화 계열 장르가 하나라도 있으면 만화), 없으면 가져올 때 정한 값
 function kindOf(it){
+  if (Array.isArray(it.cats) && it.cats.length) {        // 알라딘 주제 분류 경로: 만화 쪽 경로가 하나라도 있으면 만화
+    const isL = it.cats.some(p => /만화\/라이트노벨 > 라이트 노벨/.test(p)), isC = it.cats.some(p => /만화\/라이트노벨 > (?!라이트 노벨)/.test(p));
+    if (isC || isL) return isC ? 'c' : 'l';
+  }
   if (it.g == null) return it.kind === 'l' ? 'l' : 'c';
   const g = it.g, isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
   return isC ? 'c' : isL ? 'l' : 'c';
@@ -78,13 +82,21 @@ let SL_CACHE = null;
 function seriesList(){
   if (SL_CACHE) return SL_CACHE;
   const S_ = new Map();
-  for (const it of Object.values(CM.items)) {
-    if (!it.own) continue;
-    const k = seriesKey(it); let s = S_.get(k);
-    if (!s) S_.set(k, s = {key: k, name: baseOf(it.t), pub: it.pub || '', kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
+  // 알라딘 시리즈 번호(sid)가 있는 책은 그 번호로도 묶음: 제목이 달라도(「… Season 2」) 같은 시리즈. 제목 기준 묶음과 합침
+  const own = Object.values(CM.items).filter(it => it.own), par = new Map();
+  const find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+  const add = x => { if (!par.has(x)) par.set(x, x); };
+  for (const it of own) { const tk = seriesKey(it); add(tk); if (it.sid) { const sk = 's:' + it.sid + '|' + kindOf(it); add(sk); const a = find(tk), b = find(sk); if (a !== b) par.set(b, a); } }
+  const cnt = new Map();     // 묶음마다 가장 많이 쓰인 제목 열쇠를 대표로 (읽은 권 등 저장 열쇠가 바뀌지 않게)
+  for (const it of own) { const r = find(seriesKey(it)), m = cnt.get(r) || new Map(); m.set(seriesKey(it), (m.get(seriesKey(it)) || 0) + 1); cnt.set(r, m); }
+  const rep = new Map([...cnt].map(([r, m]) => [r, [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]]));
+  for (const it of own) {
+    const k = rep.get(find(seriesKey(it))); let s = S_.get(k);
+    if (!s) S_.set(k, s = {key: k, name: '', pub: it.pub || '', kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
     const pt = parseTitle(it.t); it.vol = pt.vol; it.vols = pt.vols; it.ed = pt.ed;
     s.items.push(it); it.vols.forEach(v => s.vols.add(v)); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
+    if (!s.name && seriesKey(it) === k) s.name = baseOf(it.t);
   }
   for (const s of S_.values()) {
     // 번호 없는 책 하나 + 2권부터 번호가 있는 시리즈: 단편으로 나왔다가 후속권이 나온 경우라 그 책을 1권으로 봄
@@ -248,7 +260,8 @@ window.addEventListener('message', e => {
   const now = Date.now(); let added = 0;
   const pick = x => ({id: String(x.id), t: String(x.t || '').slice(0, 300), cover: /^https:\/\//.test(x.cover || '') ? x.cover : '', pub: String(x.pub || '').slice(0, 80),
     date: String(x.date || '').slice(0, 10), kind: x.kind === 'l' ? 'l' : 'c', eb: x.eb ? 1 : 0, price: +x.price || 0,
-    ...(x.g != null ? {g: String(x.g).slice(0, 300)} : {}), ...(x.f != null ? {f: String(x.f).slice(0, 80)} : {})});
+    ...(x.g != null ? {g: String(x.g).slice(0, 300)} : {}), ...(x.f != null ? {f: String(x.f).slice(0, 80)} : {}),
+    ...(x.sid ? {sid: String(x.sid).slice(0, 20)} : {}), ...(Array.isArray(x.cats) ? {cats: x.cats.slice(0, 6).map(p => String(p).slice(0, 120))} : {})});
   if (d.kind === 'purchase') {
     for (const x of d.items) { if (!x.id) continue; const it = pick(x), old = CM.items[it.id]; if (!old) added++;
       CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; }

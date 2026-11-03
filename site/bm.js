@@ -111,9 +111,13 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function detail(id) {
     // 예전에 라이트노벨로 분류해 둔 책은 장르를 다시 읽어 재분류 (만화인데 라이트노벨 분류도 같이 걸린 책이 있었음)
-    if (cache[id] && !(cache[id].k === 'l' && cache[id].g === undefined)) return Promise.resolve(cache[id]);
-    return fetch('/m/mproduct.aspx?ItemId=' + id, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
+    if (cache[id] && !(cache[id].k === 'l' && cache[id].g === undefined && cache[id].cats === undefined)) return Promise.resolve(cache[id]);
+    return fetch('/shop/wproduct.aspx?ItemId=' + id, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (h) {
       var d = { k: '' };
+      // 시리즈 번호(「이 책의 전/후속편」 모두보기의 bookid)와 주제 분류 경로
+      var sm = h.match(/wbookitem\.aspx\?bookid=(\d+)/); if (sm) d.sid = sm[1];
+      var ul = h.match(/<ul id="ulCategory">([\s\S]*?)<\/ul>/);
+      if (ul) d.cats = (ul[1].match(/<li[^>]*>[\s\S]*?<\/li>/g) || []).map(function (li) { return (li.match(/>([^<>]+)<\/a>|<b>([^<]+)<\/b>/g) || []).map(function (x) { return x.replace(/<[^>]+>|>|<\/a/g, '').trim(); }).filter(Boolean).join(' > '); }).filter(Boolean);
       var ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g) || [];
       for (var i = 0; i < ld.length; i++) {
         try { var o = JSON.parse(ld[i].replace(/^<script[^>]*>|<\/script>$/g, ''));
@@ -126,6 +130,7 @@
             // 라이트노벨만 있으면 라이트노벨, 둘 다 없고 형태가 GraphicNovel이면 만화
             var isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
             d.k = isC ? 'c' : isL ? 'l' : /GraphicNovel/i.test(f) ? 'c' : '';
+            if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
           }
         } catch (e) {}
       }
@@ -174,7 +179,7 @@
     }
     if (!stopNow) saveProg({ mode: 'purchase', done: true, lastPage: 0, rows: rows, items: all.map(slim), at: Date.now() });
   }
-  function fill(x, d) { x.g = d.g; x.f = d.f; if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
+  function fill(x, d) { x.g = d.g; x.f = d.f; x.sid = d.sid; x.cats = d.cats; if (d.t) x.t = d.t; if (d.cover) x.cover = d.cover; if (d.pub) x.pub = d.pub; x.date = d.date || ''; x.eb = d.eb || /^\s*\[eBook\]/i.test(x.t) || /전자책/.test(x.sec || '') ? 1 : 0; x.kind = d.k || (d.adult ? 'c' : ''); }
   var picked = function () { return all.filter(function (x) { return x.kind === 'c' || x.kind === 'l'; }); };
   function workingButtons() {
     row.innerHTML = '';
@@ -206,7 +211,7 @@
   }
   // 보내기: 중간에 보내도 확인은 계속되고, 다 끝나면 마지막으로 한 번 더 보내면 됨 (다봤니 쪽은 겹치지 않게 합침)
   function send(final) {
-    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f }; });
+    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f, sid: x.sid, cats: x.cats }; });
     if (!items.length) { msg.textContent = '아직 보낼 만화·라이트노벨이 없습니다.'; return; }
     var w = window.open(DW + '/#comics-import', 'dabwanni'), payload;
     if (mode === 'cart') {
