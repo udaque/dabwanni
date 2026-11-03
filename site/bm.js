@@ -209,8 +209,11 @@
     btn('지금까지 보내기', true, function () { send(false); });
     btn('멈추기', false, function () { stopNow = true; });
   }
+  var wake = null;
+  async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', function () { wake = null; }); } } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && working) keepAwake(); });
   async function run() {
-    closeBtn.remove(); working = true; workingButtons();
+    closeBtn.remove(); working = true; workingButtons(); keepAwake();
     msg.textContent = '목록을 읽는 중…';
     await readList();
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
@@ -220,13 +223,16 @@
       while (!stopNow && i < all.length) {
         var x = all[i++], had = !!cache[x.id];
         fill(x, await detail(x.id)); done++;
-        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)' + (need ? ' · 새로 읽는 책 ' + need + '권이 있어 시간이 걸립니다. 와이파이에서 하세요. 멈춰도 이어집니다.' : '');
-        if (!had) await sleep(250);
+        if (!had) fresh0++;
+        var left = need - fresh0, sec = fresh0 > 10 ? Math.round((Date.now() - t0) / fresh0 * left / 1000) : 0;
+        msg.textContent = '책 정보를 확인하는 중… ' + done + ' / ' + all.length + ' (만화·라이트노벨 ' + picked().length + '권)' + (left > 0 ? ' · 새로 읽는 책 ' + left + '권 남음' + (sec ? ', 약 ' + Math.max(1, Math.round(sec / 60)) + '분' : '') + ' · 화면을 켜 둔 채로 두세요' : '');
+        if (!had) await sleep(100);
       }
     };
-    await Promise.all([worker(), worker(), worker()]);
+    var t0 = Date.now(), fresh0 = 0;
+    await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
     flushCache(true);
-    working = false;
+    working = false; try { wake && wake.release(); } catch (e) {}
     var items = picked();
     msg.textContent = (stopNow ? '멈췄습니다. 여기까지 확인한 ' + done + '권' : '전체 ' + all.length + '권') + ' 중 만화·라이트노벨 ' + items.length + '권' + (stopNow ? '. 다시 누르면 이어서 진행합니다.' : '을 찾았습니다.');
     row.innerHTML = '';
