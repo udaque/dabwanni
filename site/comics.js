@@ -87,6 +87,7 @@ function kindOf(it){
   if (Array.isArray(it.cats) && it.cats.length) {        // 알라딘 주제 분류 경로: 만화 쪽 경로가 하나라도 있으면 만화
     const isL = it.cats.some(p => /만화\/라이트노벨 > 라이트 노벨/.test(p)), isC = it.cats.some(p => /만화\/라이트노벨 > (?!라이트 노벨)/.test(p));
     if (isC || isL) return isC ? 'c' : 'l';
+    if (!it.cats.some(p => /만화|라이트\s*노벨/.test(p))) return 'x';      // 알라딘 분류에 만화·라이트노벨이 하나도 없는 책(수학책 등)은 만화책 목록에서 뺌
   }
   if (it.g == null) return it.kind === 'l' ? 'l' : 'c';
   const g = it.g, isC = /만화|코믹|웹툰|그래픽\s*노블|BL|툰/.test(g), isL = /라이트\s*노벨|라노벨|라이트노벨/.test(g);
@@ -103,7 +104,7 @@ function seriesList(){
   if (SL_CACHE) return SL_CACHE;
   const S_ = new Map();
   // 알라딘 시리즈 번호(sid)가 있는 책은 그 번호로도 묶음: 제목이 달라도(「… Season 2」) 같은 시리즈. 제목 기준 묶음과 합침
-  const own = Object.values(CM.items).filter(it => it.own && !NOT_BOOK.test(it.t || '')), par = new Map();
+  const own = Object.values(CM.items).filter(it => it.own && !NOT_BOOK.test(it.t || '') && kindOf(it) !== 'x'), par = new Map();
   const find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
   const add = x => { if (!par.has(x)) par.set(x, x); };
   // 한글만 같은 이름(「유루캠△」·「유루캠」, 「플라잉 위치(flying witch)」·「플라잉 위치」, 「뉴 게임(NEW GAME!)」·「뉴 게임! New Game!」)도 이어 붙임.
