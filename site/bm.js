@@ -139,7 +139,7 @@
   function failed(why, old) { fails[why] = (fails[why] || 0) + 1; return { fail: why, old: old }; }
   async function detail(id) {
     var old = cache[id];
-    if (old && old.mv && old.cats) return old;      // 상세 조각까지 읽은 책만 건너뜀
+    if (old && ((old.mv && old.cats) || old.perm)) return old;      // 상세 조각까지 읽은 책, 여러 번 읽어도 상품 화면이 아닌 책은 건너뜀
     var d = { k: '', mv: 1 };
     try {
       var h = await readUntil('/m/mproduct.aspx?ItemId=' + id, function (s) { var a = s.indexOf('application/ld+json'); return a >= 0 && s.indexOf('</script>', a) >= 0 && /isbn:\s*"[0-9A-Z]{8,}"/.test(s); });
@@ -155,7 +155,7 @@
           }
         } catch (e) {}
       }
-      if (!d.t && /19세 이상/.test(h)) { d.adult = 1; var old = cache[id] || {}; ['t', 'cover', 'pub', 'date', 'eb', 'k', 'g'].forEach(function (k2) { if (old[k2] != null && d[k2] == null) d[k2] = old[k2]; }); }
+      if (!d.t && (/19세 이상/.test(h) || /성인\s*인증/.test(h))) { d.adult = 1; var old = cache[id] || {}; ['t', 'cover', 'pub', 'date', 'eb', 'k', 'g'].forEach(function (k2) { if (old[k2] != null && d[k2] == null) d[k2] = old[k2]; }); }
       var code = (h.match(/isbn:\s*"([0-9A-Z]{8,})"/) || [])[1];      // 새 책 K…, 전자책 E…, 옛 책은 ISBN 숫자
       if (code) try {      // 상세 조각을 못 받아도 책 정보(분류는 장르로)는 살림
         var h2 = await (await fetch('/shop/product/getContents.aspx?ISBN=' + code + '&name=detailinfo&type=6&date=15', { credentials: 'include' })).text();
@@ -170,7 +170,16 @@
         if (d.cats && d.cats.length) { var cl = d.cats.some(function (p) { return /만화\/라이트노벨 > 라이트 노벨/.test(p); }), cc = d.cats.some(function (p) { return /만화\/라이트노벨 > (?!라이트 노벨)/.test(p); }); if (cc || cl) d.k = cc ? 'c' : 'l'; }
       } catch (e2) { d.mv = 0; }      // 다음에 다시 시도
     } catch (e) { return failed('연결', old); }
-    if (!d.t && !d.adult) return failed('다른 화면', old);      // 정상 상품 화면이 아님 (막힘·오류 화면 등) → 저장하지 않고 다시 시도
+    if (!d.t && !d.adult) {
+      // 정상 상품 화면이 아님. 무슨 화면인지 짧게 남겨 두고(알림 문구·제목·첫 글자), 일시적일 수 있으니 다시 시도.
+      // 쉬었다가 다시 읽어도 같은 화면이 3번 연속 나오면 상품 화면이 원래 없는 것으로 보고 더 읽지 않음(「건너뛴 상품」으로 따로 보여 줌)
+      var snip = ((h.match(/alert\(['"]([^'"]{1,120})/) || [])[1] || (h.match(/<title>([^<]{1,80})/) || [])[1] || h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || ('빈 화면 ' + h.length + '자'));
+      var same = old && old.snip === snip ? (old.same || 1) + 1 : 1, keep = Object.assign({}, old || {}, { bad: ((old && old.bad) || 0) + 1, snip: snip, same: same });
+      // 같은 화면이 3번 연속 (쉬었다가 다시 읽어도 같음)
+      if (same >= 3) { keep.perm = 1; keep.k = keep.k || ''; cache[id] = keep; put('c', id, keep); return keep; }
+      cache[id] = keep; put('c', id, keep);
+      return failed('다른 화면', old && old.k ? old : null);
+    }
     cache[id] = d; put('c', id, d);
     return d;
   }
@@ -280,6 +289,15 @@
       (nf.length ? ' 끝내 읽지 못한 책 ' + nf.length + '권(예전 정보로 처리 ' + nfOld + '권)은 다음에 다시 읽습니다. 실패 사유: ' + why : '');
     row.innerHTML = '';
     if (items.length) btn('다봤니로 보내기', true, function () { send(true); });
+    var perm = all.filter(function (x) { return cache[x.id] && cache[x.id].perm; });
+    if (perm.length) {
+      msg.textContent += ' 상품 화면이 열리지 않는 상품 ' + perm.length + '권은 건너뛰었습니다.';
+      btn('건너뛴 상품 보기', false, function () {
+        var list = document.createElement('div'); list.style.cssText = 'max-height:40vh;overflow:auto;margin:10px 0 0;font-size:13px;line-height:1.5;color:#E7ECF3';
+        list.innerHTML = perm.map(function (x) { return '<div style="padding:6px 0;border-top:1px solid #2B3443"><b>' + (x.t || x.id).replace(/</g, '&lt;') + '</b><br><span style="color:#97A3B6">' + String(cache[x.id].snip || '').replace(/</g, '&lt;') + '</span></div>'; }).join('');
+        box.appendChild(list);
+      });
+    }
     if (nf.length) btn('못 읽은 책 다시 읽기', false, async function () { stopNow = false; working = true; workingButtons(); keepAwake(); fails = {}; await retryFailed(); finishRun(); });
     btn('닫기', false, function () { box.remove(); window.__dwBM = null; });
     };
