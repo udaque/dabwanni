@@ -252,12 +252,15 @@
     var t0 = Date.now(), fresh0 = 0;
     await Promise.all([worker(), worker(), worker(), worker()]);
     // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시 2개)
+    var retryFailed = async function () {
     for (round = 1; round <= 8 && !stopNow; round++) {
       queue = all.filter(function (x) { return x.failed; }); if (!queue.length) break;
       msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 ' + (round * 5) + '초 뒤 다시 읽습니다…'; await sleep(round * 5000);
       await Promise.all([worker(), worker()]);
     }
     round = 0;
+    };
+    var finishRun = function () {
     working = false; try { wake && wake.release(); } catch (e) {}
     var items = picked();
     var nf = all.filter(function (x) { return x.failed; }), nfOld = nf.filter(function (x) { return x.kind; }).length, why = Object.keys(fails).map(function (k) { return k + ' ' + fails[k] + '회'; }).join(', ');
@@ -265,7 +268,11 @@
       (nf.length ? ' 끝내 읽지 못한 책 ' + nf.length + '권(예전 정보로 처리 ' + nfOld + '권)은 다음에 다시 읽습니다. 실패 사유: ' + why : '');
     row.innerHTML = '';
     if (items.length) btn('다봤니로 보내기', true, function () { send(true); });
+    if (nf.length) btn('못 읽은 책 다시 읽기', false, async function () { stopNow = false; working = true; workingButtons(); keepAwake(); fails = {}; await retryFailed(); finishRun(); });
     btn('닫기', false, function () { box.remove(); window.__dwBM = null; });
+    };
+    await retryFailed();
+    finishRun();
   }
   // 보내기: 중간에 보내도 확인은 계속되고, 다 끝나면 마지막으로 한 번 더 보내면 됨 (다봤니 쪽은 겹치지 않게 합침)
   function send(final) {
