@@ -16,49 +16,69 @@ function korNum(w){
   return (m[1] ? KN10[m[1]] : 0) + (m[2] ? KN1[m[2]] : 0);
 }
 // 판 표시: 같은 권의 다른 판(그 권으로 침) / 번호 체계가 따로인 판(별도 시리즈)
-const SAME_ED = /^(특별판|한정판|특장판|초판\s*한정판?|초회\s*한정판?|일반판|부록판|스페셜\s*에디션|리미티드\s*에디션|한정\s*특장판|특전판|세트)$/;
-const SEP_ED = /^(애장판|완전판|소장판|개정판|신장판|와이드판|합본판?|무삭제판?|컬러판|풀컬러판?)$/;
+const SAME_ED = /^(특별판|한정판|특장판|초판\s*한정판?|초회\s*한정판?|일반판|부록판|스페셜\s*에디션|리미티드\s*에디션|한정\s*특장판|특전판|세트|박스세트|합본판?|올컬러판|컬러판|풀컬러판?|초판본|체험판|특별체험판)$/;
+const SEP_ED = /^(애장판|완전판|소장판|개정판|신장판|와이드판|무삭제판?)$/;
 const PT_CACHE = new Map();
+// 구매내역 전수 점검(6,451권)에서 나온 모양들을 반영한 제목 읽기
+const ED_WORDS = /판|한정|특전|특장|세트|부록|포함|에디션|edition|박스|합본|증보|퍼즐|소책자|엽서|카드|달력|캘린더|스티커|아크릴|굿즈|커버|화집|노트|체험|ver\.|버전/i;
+const QUAL = /\s*\((?:단행본|코믹|코믹스|만화|웹툰|만화판|코믹판)\)\s*$/;     // 「베아게르타(단행본)」, 「…(코믹)」 → 시리즈 이름에서 뗌
 function parseTitle(t){
   if (PT_CACHE.has(t)) return PT_CACHE.get(t);
-  let c = String(t || '').replace(/^\s*(\[[^\]]*\]\s*)+/, '')       // [eBook] [고화질] 같은 앞 표시
-    .replace(/\s+-\s+.*$/, '').trim();                               // 「… 5 - 시프트코믹스」 뒤 부제·총서명
-  let ed = '', sep = '';
-  const plus = c.split(/\s+\+\s+/);                                   // 두 권 묶음: 「사카모토 데이즈 16 + 소설 사카모토 데이즈」 → 앞 책 기준, 「세트」 꼬리표
+  let c = String(t || '').replace(/^\s*(\[[^\]]*\]\s*)+/, '').trim();   // [eBook] [고화질] [바닐라] 같은 앞 표시
+  let ed = '', sep = '', vols = null, upDown = 0;
+  // 「에로만화의 별 - 상」 「… (하)」 「… 상권」: 상·중·하 권
+  let ud = c.match(/^(.*?\S)\s*(?:-\s*|\(\s*)?(상|중|하)(?:권)?\s*\)?(?:\s+-\s+.*)?$/);
+  if (ud && !/\d\s*$/.test(ud[1])) { c = ud[1]; upDown = {'상': 1, '중': 2, '하': 2}[ud[2]]; }
+  c = c.replace(/\s+-\s+.*$/, '').trim();                               // 「… 5 - 시프트코믹스」 뒤 부제·총서명
+  const plus = c.split(/\s+\+\s+/);                                    // 「사카모토 데이즈 16 + 소설 …」 → 앞 책 기준
   if (plus.length > 1 && plus[0].trim()) { c = plus[0].trim(); ed = '세트'; }
-  // 닫히지 않은 끝 괄호(알라딘이 긴 제목을 잘라 「… 12 (초판한정 일러스트 포스트 카드」처럼 온 경우)
+  // 세트의 권수 표시: 「(전6권)」 「(총8권/완결)」 「전4권」 → 1~N권
+  let tot = c.match(/\s*\(?\s*(?:전|총)\s*(\d{1,3})\s*권[^)]*\)?\s*$/);
+  if (tot) { const n = +tot[1]; c = c.slice(0, tot.index).trim(); if (!/\d\s*[~∼～.·,]\s*\d+\s*(?:권|세트|합본)?\s*$/.test(c) && !/\s\d{1,3}$/.test(c)) { vols = []; for (let v = 1; v <= n && v <= 200; v++) vols.push(v); } ed = ed || '세트'; }
+  // 닫히지 않은 끝 괄호(알라딘이 긴 제목을 잘라 보낸 경우)
   let um = c.match(/\s*\(([^()]*)$/);
-  if (um) { if (/판|한정|특전|세트|부록|포함|에디션|카드/.test(um[1])) ed = ed || um[1].trim().replace(/\s.*$/, ''); c = c.slice(0, um.index).trim(); }
-  // 권 번호 뒤 「 : 부제」 (「사카모토 데이즈 21 : ASAKURA DIYS」) → 부제 떼기
-  um = c.match(/^(.*\S)\s+(\d{1,3})\s*권?\s*[:：]\s+\S.*$/);
+  if (um) { if (ED_WORDS.test(um[1])) ed = ed || um[1].trim().replace(/\s.*$/, ''); c = c.slice(0, um.index).trim(); }
+  c = c.replace(/\s*\(?완결\)?\s*$/, '').trim();                        // 「… 10 (완결)」
+  // 권 번호 뒤 「 : 부제」 (「… 21 : ASAKURA DIYS」, 「Vol.1 : 집으로」)
+  um = c.match(/^(.*\S)\s+((?:vol\.?\s*)?\d{1,3})\s*권?\s*[:：]\s+\S.*$/i);
   if (um) c = `${um[1]} ${um[2]}`;
-  for (let guard = 0; guard < 6; guard++) {
-    let m = c.match(/\s*\(([^()]*)\)\s*$/);                          // 끝의 괄호: (특장판) (너블특선판) …
+  for (let guard = 0; guard < 8; guard++) {
+    let m = c.match(/\s*\(([^()]*)\)\s*$/);                           // 끝의 괄호: (특장판) (올컬러판) (3 기간 한정 소책자) …
     if (m) {
       const w = m[1].trim();
-      if (SEP_ED.test(w)) sep = w; else if (SAME_ED.test(w) || /판|한정|특전|세트|부록|포함|에디션|edition/i.test(w)) ed = ed || w; else break;
+      const nw = w.match(/^(\d{1,3})\s+(\S.*)$/);                       // 「(3 기간 한정 소책자)」: 괄호 안 앞 숫자가 권 번호
+      if (nw && ED_WORDS.test(nw[2])) { ed = ed || nw[2]; c = `${c.slice(0, m.index).trim()} ${nw[1]}`; continue; }
+      if (SEP_ED.test(w)) sep = w; else if (SAME_ED.test(w) || ED_WORDS.test(w)) ed = ed || w; else break;
       c = c.slice(0, m.index).trim(); continue;
     }
-    m = c.match(/\s(\S+)$/);                                          // 괄호 없는 끝 낱말: 「단다단 18 특별판」
+    // 권 번호 뒤에 붙은 판 설명 여러 낱말: 「2 직소퍼즐 한정판 박스세트」 「1~2 특별 합본판」 「3 한정판」
+    m = c.match(/^(.*\S\s+(?:vol\.?\s*)?\d{1,3}(?:\s*[~∼～.·,]\s*\d{1,3})?\s*권?)\s+(\S.*)$/i);
+    if (m && ED_WORDS.test(m[2]) && !/\d{2,}/.test(m[2])) { ed = ed || m[2].trim(); c = m[1].trim(); continue; }
+    m = c.match(/\s(\S+)$/);                                           // 괄호 없는 끝 낱말: 「단다단 18 특별판」
     if (m && SAME_ED.test(m[1])) { ed = ed || m[1]; c = c.slice(0, m.index).trim(); continue; }
     if (m && SEP_ED.test(m[1]) && /\d\s*권?$/.test(c.slice(0, m.index))) { sep = m[1]; c = c.slice(0, m.index).trim(); continue; }
     break;
   }
-  let vol = null, base = c, vols = null;
-  // 여러 권 묶음: 「야마다 군과 Lv999의 사랑을 하다 1~3권 특별판」 → 1·2·3권
-  const rg = c.match(/^(.*?\S)\s*(\d{1,3})\s*[~∼～]\s*(\d{1,3})\s*권?$/);
+  let vol = null, base = c;
+  // 여러 권 묶음: 「1~3권」 「4~6」 「1.2 세트」 「1,2」 → 각 권
+  const rg = c.match(/^(.*?\S)\s*(\d{1,3})\s*(?:[~∼～]|[.·,](?=\s*\d))\s*(\d{1,3})\s*권?$/);
   if (rg && +rg[2] < +rg[3] && +rg[3] - +rg[2] < 60) {
     vols = []; for (let v = +rg[2]; v <= +rg[3]; v++) vols.push(v);
-    const r0 = {base: (sep && !rg[1].includes(sep) ? `${rg[1]} ${sep}` : rg[1]).trim(), vol: +rg[3], vols, ed};
-    PT_CACHE.set(t, r0); return r0;
-  }
-  let m = c.match(/^(.*?\S)\s*(?:Season|SEASON|season|시즌)\s*(\d{1,3})$/) || c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
-  if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
-  else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
+    base = rg[1].trim(); vol = +rg[3];
+  } else if (!vols) {
+    let m = c.match(/^(.*?\S)\s*(?:Season|시즌|vol\.?|volume)\s*(\d{1,3})$/i) || c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
+    if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
+    else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
+  } else vol = vols[vols.length - 1];
+  if (!vol && upDown) { vol = upDown; }
+  base = base.replace(QUAL, '').replace(/\s+vol\.?$/i, '').trim();
   if (sep && !base.includes(sep)) base = `${base} ${sep}`;
-  const r = {base: base || c || String(t || ''), vol, vols: vol ? [vol] : [], ed};
+  const trial = /체험판/.test(ed);                                     // 체험판은 그 권을 산 것으로 치지 않음
+  const r = {base: base || c || String(t || ''), vol: trial ? null : vol, vols: trial ? [] : (vols || (vol ? [vol] : [])), ed, trial};
   PT_CACHE.set(t, r); return r;
 }
+// 만화책이 아닌 상품(음반·영상)은 묶지 않음
+const NOT_BOOK = /^\s*\[(?:음반|DVD|블루레이|Blu-?ray|LP|CD)\]/i;
 const cleanTitle = t => parseTitle(t).base;
 const volOf = t => parseTitle(t).vol;
 const baseOf = t => parseTitle(t).base;
@@ -83,10 +103,21 @@ function seriesList(){
   if (SL_CACHE) return SL_CACHE;
   const S_ = new Map();
   // 알라딘 시리즈 번호(sid)가 있는 책은 그 번호로도 묶음: 제목이 달라도(「… Season 2」) 같은 시리즈. 제목 기준 묶음과 합침
-  const own = Object.values(CM.items).filter(it => it.own), par = new Map();
+  const own = Object.values(CM.items).filter(it => it.own && !NOT_BOOK.test(it.t || '')), par = new Map();
   const find = x => { while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
   const add = x => { if (!par.has(x)) par.set(x, x); };
-  for (const it of own) { const tk = seriesKey(it); add(tk); if (it.sid) { const sk = 's:' + it.sid + '|' + kindOf(it); add(sk); const a = find(tk), b = find(sk); if (a !== b) par.set(b, a); } }
+  // 한글만 같은 이름(「유루캠△」·「유루캠」, 「플라잉 위치(flying witch)」·「플라잉 위치」, 「뉴 게임(NEW GAME!)」·「뉴 게임! New Game!」)도 이어 붙임.
+  // 단, 영문 부분이 서로 다르고 괄호 속 원제도 아니면(「일하는 세포 BLACK」, 「진격의 거인 LOST GIRLS」 같은 외전) 붙이지 않음
+  const latinOut = b => b.replace(/\([^)]*\)/g, '').toLowerCase().replace(/[^a-z]/g, ''), latinAll = b => b.toLowerCase().replace(/[^a-z]/g, '');
+  const hkey = it => { const b = baseOf(it.t), h = b.replace(/[^가-힣0-9]/g, ''); return h.length >= 3 ? 'h:' + h + '|' + kindOf(it) : null; };
+  const hLat = new Map();      // 한글 열쇠마다 처음 본 이름의 영문 부분
+  for (const it of own) { const tk = seriesKey(it); add(tk); const h = hkey(it); if (h) {
+      const b = baseOf(it.t), lo = latinOut(b), la = latinAll(b);
+      if (!hLat.has(h)) hLat.set(h, []);
+      const ok = hLat.get(h).find(([lo2, la2]) => lo === lo2 || la === la2 || (!lo && la && la === la2) || (!lo && !lo2) );
+      hLat.get(h).push([lo, la, tk]);
+      if (ok) { const a = find(tk), c2 = find(ok[2]); if (a !== c2) par.set(c2, a); }
+    } if (it.sid) { const sk = 's:' + it.sid + '|' + kindOf(it); add(sk); const a = find(tk), b = find(sk); if (a !== b) par.set(b, a); } }
   const cnt = new Map();     // 묶음마다 가장 많이 쓰인 제목 열쇠를 대표로 (읽은 권 등 저장 열쇠가 바뀌지 않게)
   for (const it of own) { const r = find(seriesKey(it)), m = cnt.get(r) || new Map(); m.set(seriesKey(it), (m.get(seriesKey(it)) || 0) + 1); cnt.set(r, m); }
   const rep = new Map([...cnt].map(([r, m]) => [r, [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]]));
