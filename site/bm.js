@@ -181,6 +181,18 @@
   function saveProg(p) { PROG = p; if (DB) put('p', 'prog', p); else { try { localStorage.setItem(PK, JSON.stringify(p)); } catch (e) {} } }
   var slim = function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, sec: x.sec, price: x.price }; };
   var all = [], working = false, stopNow = false;
+  var CONC = 4; try { CONC = Math.min(8, Math.max(1, +localStorage.getItem('dwbm_conc') || 4)); } catch (e) {}
+  function concRow() {
+    var r = document.createElement('div'); r.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:14px;color:#97A3B6';
+    var lab = document.createElement('span'); lab.textContent = '동시에 읽을 권수'; lab.style.whiteSpace = 'nowrap';
+    var minus = document.createElement('button'), plus = document.createElement('button'), val = document.createElement('b');
+    [minus, plus].forEach(function (x) { x.style.cssText = 'width:36px;height:32px;border-radius:8px;border:1px solid #2B3443;background:#10151E;color:#E7ECF3;font-size:18px;font-weight:700'; });
+    minus.textContent = '−'; plus.textContent = '+'; val.style.cssText = 'min-width:20px;text-align:center;color:#E7ECF3;font-size:16px';
+    var show = function () { val.textContent = CONC; try { localStorage.setItem('dwbm_conc', CONC); } catch (e) {} };
+    minus.onclick = function () { CONC = Math.max(1, CONC - 1); show(); }; plus.onclick = function () { CONC = Math.min(8, CONC + 1); show(); };
+    show(); r.appendChild(lab); r.appendChild(minus); r.appendChild(val); r.appendChild(plus);
+    return r;
+  }
 
   async function readList() {
     if (mode !== 'purchase') { all = parse(document); return; }
@@ -227,7 +239,7 @@
   async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', function () { wake = null; }); } } catch (e) {} }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && working) keepAwake(); });
   async function run() {
-    closeBtn.remove(); working = true; workingButtons(); keepAwake();
+    closeBtn.remove(); if (cRow) cRow.remove(); working = true; workingButtons(); keepAwake();
     msg.textContent = '목록을 읽는 중…';
     await readList();
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
@@ -250,13 +262,13 @@
       }
     };
     var t0 = Date.now(), fresh0 = 0;
-    await Promise.all([worker(), worker(), worker(), worker()]);
-    // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시 2개)
+    await Promise.all(Array.from({ length: CONC }, worker));
+    // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시에 읽는 수의 절반)
     var retryFailed = async function () {
     for (round = 1; round <= 8 && !stopNow; round++) {
       queue = all.filter(function (x) { return x.failed; }); if (!queue.length) break;
       msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 ' + (round * 5) + '초 뒤 다시 읽습니다…'; await sleep(round * 5000);
-      await Promise.all([worker(), worker()]);
+      await Promise.all(Array.from({ length: Math.max(1, Math.ceil(CONC / 2)) }, worker));      // 다시 읽기는 절반으로 천천히
     }
     round = 0;
     };
@@ -295,11 +307,12 @@
     });
   }
   msg.textContent = mode === 'cart' ? '이 장바구니의 만화·라이트노벨을 다봤니에 백업합니다.' : '구매내역의 만화·라이트노벨을 모두 읽어 다봤니로 가져옵니다. 쪽이 많으면 몇 분 걸릴 수 있습니다.';
-  var startMsg = msg.textContent; msg.textContent = '준비하는 중…';
+  var cRow = null, startMsg = msg.textContent; msg.textContent = '준비하는 중…';
   loadStore().then(function () {
     msg.textContent = startMsg;
     var pr = loadProg();
     if (mode === 'purchase' && pr && !pr.done && pr.items && pr.items.length) msg.textContent = '지난번에 목록을 ' + pr.lastPage + '쪽까지 읽었습니다. 「시작」을 누르면 이어서 진행합니다.';
+    if (mode === 'purchase') { cRow = concRow(); box.insertBefore(cRow, row); }
     btn('시작', true, run);
   });
 })();
