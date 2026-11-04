@@ -254,7 +254,9 @@
     if (stopNow && mode === 'purchase') { var pg0 = (loadProg() || {}).lastPage; msg.textContent = '목록을 ' + pg0 + '쪽까지 읽고 멈췄습니다. 다시 누르면 ' + (pg0 + 1) + '쪽부터 이어서 읽습니다.'; finish(); return; }
     if (!all.length) { msg.textContent = '이 화면에서 상품을 찾지 못했습니다. 알라딘 화면 구조가 다를 수 있습니다. 이 화면 캡처를 다봤니 관리자에게 보내 주세요.'; finish(); return; }
     var i = 0, done = 0, need = all.filter(function (x) { return !(cache[x.id] && cache[x.id].mv && cache[x.id].cats); }).length;
-    var streak = 0, queue = all.slice(), round = 0;
+    var MEDIA = /^\s*\[(?:블루레이|음반|DVD|LP|CD|비디오|게임)\]/;
+    all.forEach(function (x) { x.skip = MEDIA.test(x.t || ''); });      // 블루레이·음반 등은 책이 아니라 읽지 않음
+    var streak = 0, queue = all.filter(function (x) { return !x.skip; }), round = 0;
     var showing = function () {
       var left = need - fresh0, sec = fresh0 > 10 ? Math.round((Date.now() - t0) / fresh0 * left / 1000) : 0, nf = all.filter(function (x) { return x.failed; }).length;
       msg.textContent = (round ? '읽기 실패한 책 다시 시도 중 (' + round + '번째)… ' : '책 정보를 확인하는 중… ' + done + ' / ' + all.length) + ' · 만화·라이트노벨 ' + picked().length + '권' + (nf ? ' · 다시 읽을 책 ' + nf + '권' : '') + (!round && left > 0 ? ' · 새로 읽는 책 ' + left + '권 남음' + (sec ? ', 약 ' + Math.max(1, Math.round(sec / 60)) + '분' : '') : '') + ' · 화면을 켜 둔 채로 두세요';
@@ -275,7 +277,7 @@
     // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시에 읽는 수의 절반)
     var retryFailed = async function () {
     for (round = 1; round <= 8 && !stopNow; round++) {
-      queue = all.filter(function (x) { return x.failed; }); if (!queue.length) break;
+      queue = all.filter(function (x) { return x.failed && !x.skip; }); if (!queue.length) break;
       msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 ' + (round * 5) + '초 뒤 다시 읽습니다…'; await sleep(round * 5000);
       await Promise.all(Array.from({ length: Math.max(1, Math.ceil(CONC / 2)) }, worker));      // 다시 읽기는 절반으로 천천히
     }
@@ -313,7 +315,11 @@
       var secs = [], idx = {};
       items.forEach(function (x) { var n = x.sec || '기타'; if (!(n in idx)) { idx[n] = secs.length; secs.push({ name: n, items: [] }); } secs[idx[n]].items.push(x); });
       payload = { type: 'dabwanni-aladin', kind: 'cart', items: items, sections: secs };
-    } else payload = { type: 'dabwanni-aladin', kind: 'purchase', items: items };
+    } else {
+      var failList = all.filter(function (x) { return !x.skip && !(x.kind === 'c' || x.kind === 'l') && (x.failed || (cache[x.id] && cache[x.id].perm)); })
+        .map(function (x) { return { id: x.id, t: x.t, buy: x.buy, cover: x.cover, snip: (cache[x.id] && cache[x.id].snip) || '' }; });
+      payload = { type: 'dabwanni-aladin', kind: 'purchase', items: items, fails: failList };
+    }
     var keep = msg.textContent; msg.textContent = '보내는 중… (' + items.length + '권)';
     var tries = 0, timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg.textContent = '전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'; } }, 500);
     window.addEventListener('message', function onAck(e) {

@@ -395,3 +395,8 @@ html{touch-action:manipulation}
 .cmext .chip{height:32px}
 .cmext .chip.ext{color:var(--sub)}
 .pill.edtag{font-size:11px;padding:1px 7px;vertical-align:middle}
+
+/* 설정: 만화책 가져오기 실패 */
+.cmunres{max-height:60vh;overflow:auto}
+.cmubtn{display:flex;gap:6px;margin-top:6px}
+.cmubtn button{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap}

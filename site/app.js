@@ -783,7 +783,7 @@ function render(){
     document.querySelectorAll('#setLang [data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === S.lang));
     document.querySelectorAll('#setTheme [data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === (S.theme || 'system')));
     document.querySelectorAll('#setEpHide [data-ephide]').forEach(b => b.classList.toggle('on', (b.dataset.ephide === '1') === S.epHide));
-    renderDateFix(); renderSync();
+    renderDateFix(); renderSync(); if (typeof renderUnres === 'function') renderUnres();
     return;
   }
   const seasonMode = S.tab === 'season' && !S.q;

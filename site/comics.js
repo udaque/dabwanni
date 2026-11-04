@@ -1,6 +1,6 @@
 /* 다봤니 만화책: 알라딘 구매내역·장바구니를 북마클릿으로 가져와 시리즈별로 관리 (애니와 별개) */
 const CM = store.get('comics', {v: 1, items: {}, series: {}, carts: []});
-CM.items ||= {}; CM.series ||= {}; CM.carts ||= [];
+CM.items ||= {}; CM.series ||= {}; CM.carts ||= []; CM.unres ||= {}; CM.unresOff ||= {};      // unres: 알라딘에서 끝내 못 읽은 상품, unresOff: 목록에서 뺀 것
 const CMS = {kind: store.get('cmKind', 'all'), view: store.get('cmView', 'all'), sort: store.get('cmSort', 'name'), cart: 0, guide: false};
 const ALADIN = ['https://www.aladin.co.kr', 'https://m.aladin.co.kr'];
 const BUY_URL = 'https://www.aladin.co.kr/m/mbest.aspx?BestType=OrderSave';
@@ -296,10 +296,14 @@ window.addEventListener('message', e => {
     ...(x.sid ? {sid: String(x.sid).slice(0, 20)} : {}), ...(Array.isArray(x.cats) ? {cats: x.cats.slice(0, 6).map(p => String(p).slice(0, 120))} : {})});
   if (d.kind === 'purchase') {
     for (const x of d.items) { if (!x.id) continue; const it = pick(x), old = CM.items[it.id]; if (!old) added++;
-      CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; }
+      CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; delete CM.unres[it.id]; }
+    for (const f of (Array.isArray(d.fails) ? d.fails : [])) {
+      const id = String(f.id || ''); if (!id || CM.items[id] || CM.unresOff[id]) continue;
+      CM.unres[id] = {id, t: String(f.t || '').slice(0, 300), buy: String(f.buy || '').slice(0, 10), cover: /^https:\/\//.test(f.cover || '') ? f.cover : '', snip: String(f.snip || '').slice(0, 160), at: now};
+    }
   } else if (d.kind === 'cart') {
     const secs = (Array.isArray(d.sections) ? d.sections : []).map(s => ({name: String(s.name || '').slice(0, 40), items: (s.items || []).filter(x => x.id).map(pick)}));
-    CM.carts.unshift({at: now, sections: secs}); CM.carts = CM.carts.slice(0, 12); added = secs.reduce((n, s) => n + s.items.length, 0);
+    CM.carts.unshift({at: now, sections: secs}); added = secs.reduce((n, s) => n + s.items.length, 0);
   }
   cmSave();
   try { e.source && e.source.postMessage({type: 'dabwanni-aladin-ack', added}, e.origin); } catch {}
@@ -309,9 +313,46 @@ window.addEventListener('message', e => {
 
 /* ---------- 동기화에 넣기: 작품·시리즈는 바뀐 시각이 늦은 쪽, 장바구니 백업은 합쳐 최근 12개 ---------- */
 function cmMerge(L, R_){
-  const out = {v: 1, items: {...(R_?.items || {})}, series: {...(R_?.series || {})}, carts: []};
+  const out = {v: 1, items: {...(R_?.items || {})}, series: {...(R_?.series || {})}, carts: [], unres: {}, unresOff: {}};
   for (const [k, v] of Object.entries(L.items || {})) if (!out.items[k] || (v.u || 0) >= (out.items[k].u || 0)) out.items[k] = v;
   for (const [k, v] of Object.entries(L.series || {})) if (!out.series[k] || (v.u || 0) >= (out.series[k].u || 0)) out.series[k] = v;
   const seen = new Set(); for (const c of [...(L.carts || []), ...(R_?.carts || [])].sort((a, b) => b.at - a.at)) if (!seen.has(c.at)) { seen.add(c.at); out.carts.push(c); }
-  out.carts = out.carts.slice(0, 12); return out;
+  out.unres = {...(R_?.unres || {}), ...(L.unres || {})}; out.unresOff = {...(R_?.unresOff || {}), ...(L.unresOff || {})};
+  for (const k of Object.keys(out.unres)) if (out.items[k] || out.unresOff[k]) delete out.unres[k];
+  return out;
 }
+
+/* ---------- 설정: 가져오기 실패 (알라딘에서 끝내 못 읽은 상품을 직접 시리즈·권에 넣기) ---------- */
+function renderUnres(){
+  const box = $('#cmUnres'); if (!box) return;
+  const L = Object.values(CM.unres || {}).sort((a, b) => String(b.buy).localeCompare(String(a.buy)));
+  $('#cmUnresN').textContent = fmtN(L.length); $('#cmUnresN').hidden = !L.length;
+  box.innerHTML = L.length ? `<div class="rows cmunres">${L.map(f => `<div class="cmrowi">
+      <span class="cover">${f.cover ? `<img src="${esc(f.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>
+      <span class="grow"><b>${esc(f.t)}</b><span class="s">${esc(f.snip)}</span>
+        <span class="cmubtn"><button data-cmu="add" data-id="${esc(f.id)}">${t('시리즈에 넣기')}</button><button data-cmu="off" data-id="${esc(f.id)}">${t('목록에서 빼기')}</button></span></span></div>`).join('')}</div>`
+    : `<p class="setnote">${t('못 읽은 상품이 없습니다.')}</p>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cmu]'); if (!b) return;
+  const f = CM.unres[b.dataset.id]; if (!f) return;
+  if (b.dataset.cmu === 'off') { CM.unresOff[f.id] = 1; delete CM.unres[f.id]; cmSave(); return renderUnres(); }
+  const S_ = seriesList(), base = baseOf(String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, '')), guess = S_.find(s => norm(s.name) === norm(base));
+  const box = document.createElement('div'); box.id = 'editor';
+  box.innerHTML = `<div class="ebox" role="dialog" aria-modal="true"><h3>${t('시리즈에 넣기')}</h3><p class="setnote">${esc(f.t)}</p>
+    <label class="erow"><span>${t('시리즈')}</span><input id="cmuS" list="cmuList" value="${esc(guess ? guess.name : base)}"></label>
+    <datalist id="cmuList">${S_.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist>
+    <label class="erow"><span>${t('권')}</span><input id="cmuV" type="number" inputmode="numeric" value="${esc(volOf(String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, '')) || '')}"></label>
+    <div class="seg emode"><button data-k="c" class="${(guess?.kind || 'c') === 'c' ? 'on' : ''}">${t('만화')}</button><button data-k="l" class="${guess?.kind === 'l' ? 'on' : ''}">${t('라이트노벨')}</button></div>
+    <div class="ebtns"><button class="ecancel">${t('닫기')}</button><button class="esave">${t('저장')}</button></div></div>`;
+  document.body.appendChild(box);
+  let kind = guess?.kind || 'c';
+  box.querySelectorAll('[data-k]').forEach(x => x.onclick = () => { kind = x.dataset.k; box.querySelectorAll('[data-k]').forEach(y => y.classList.toggle('on', y === x)); });
+  box.querySelector('.ecancel').onclick = () => box.remove(); box.onclick = ev => { if (ev.target === box) box.remove(); };
+  box.querySelector('.esave').onclick = () => {
+    const name = box.querySelector('#cmuS').value.trim(), v = parseInt(box.querySelector('#cmuV').value, 10); if (!name) return;
+    const s = S_.find(x => norm(x.name) === norm(name)), sid = s ? (s.items.find(i => i.sid) || {}).sid : undefined;
+    CM.items[f.id] = {id: f.id, t: v ? `${name} ${v}` : name, orig: f.t, own: 1, kind: s ? s.kind : kind, buy: f.buy, cover: f.cover, pub: s ? s.pub : '', man: 1, ...(sid ? {sid} : {}), u: Date.now()};
+    delete CM.unres[f.id]; cmSave(); box.remove(); renderUnres();
+  };
+});
