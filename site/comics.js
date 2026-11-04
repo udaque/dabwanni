@@ -248,10 +248,17 @@ function cmRender(tab){
   }
   box.querySelectorAll('.fscroll').forEach(el => { const f = () => { el.classList.toggle('fl', el.scrollLeft > 2); el.classList.toggle('fr', el.scrollLeft + el.clientWidth < el.scrollWidth - 2); }; el.onscroll = f; f(); });
 }
+// 같은 시리즈의 다른 형태(종이책 ↔ 이북): 열쇠가 같거나, 이름이 같거나, 한글만 남긴 이름이 같은 것
+function otherFmt(s){
+  const L = seriesList().filter(x => x.fmt !== s.fmt && x.kind === s.kind), root = s.key.replace(/\|[pe]$/, ''), hn = x => x.replace(/[^가-힣0-9]/g, '');
+  return L.find(x => x.key.replace(/\|[pe]$/, '') === root) || L.find(x => norm(x.name) === norm(s.name)) || (hn(s.name).length >= 3 ? L.find(x => hn(x.name) === hn(s.name)) : null) || null;
+}
 function cmOpen(key){
   const s = seriesList().find(x => x.key === key); if (!s) return;
+  const o = otherFmt(s);
   const box = document.createElement('div'); box.id = 'editor';
-  box.innerHTML = `<div class="ebox cmsheet" role="dialog" aria-modal="true"><h3>${esc(s.name)}</h3><p class="setnote">${esc([s.pub, s.kind === 'l' ? t('라이트노벨') : t('만화')].join(' · '))}</p>
+  box.innerHTML = `<div class="ebox cmsheet" role="dialog" aria-modal="true"><h3>${esc(s.name)}</h3><p class="setnote">${esc([s.pub, s.kind === 'l' ? t('라이트노벨') : t('만화'), s.fmt === 'e' ? t('이북') : t('종이책')].join(' · '))}</p>
+    ${o ? `<button class="cmother" data-cmo="${esc(o.key)}">${esc(F('otherFmtN', [o.fmt === 'e' ? t('이북') : t('종이책'), o.vols.size || o.items.length]))} ›</button>` : ''}
     ${s.gaps.length ? `<p class="cmwarn ${s.ack ? 'acked' : ''}">${esc(F('missingVols', ranges(s.gaps)))}</p>
       <div class="cmext"><span class="setnote">${t('다른 곳에서 산 권을 누르세요')}</span><div class="pills">${s.gaps.map(v => `<button class="chip" data-cmx="add" data-v="${v}">${esc(F('volN', v))}</button>`).join('')}${s.gaps.length > 1 ? `<button class="chip on" data-cmx="all">${esc(F('allMissing', ranges(s.gaps)))}</button>` : ''}</div></div>` : ''}
     ${s.ext.length ? `<div class="cmext"><span class="setnote">${t('다른 곳에서 삼')}</span><div class="pills">${s.ext.map(v => `<button class="chip ext" data-cmx="del" data-v="${v}">${esc(F('volN', v))} ✕</button>`).join('')}</div></div>` : ''}
@@ -263,6 +270,8 @@ function cmOpen(key){
   box.querySelector('.ecancel').onclick = () => box.remove();
   box.onclick = e => {
     if (e.target === box) return box.remove();
+    const ob = e.target.closest('[data-cmo]');
+    if (ob) { const os = seriesList().find(x => x.key === ob.dataset.cmo); box.remove(); if (os) { CMS.fmt = os.fmt; store.set('cmFmt', os.fmt); if (S.tab === 'cbuy') cmRender(S.tab); cmOpen(os.key); } return; }      // 다른 형태의 같은 시리즈로
     const b = e.target.closest('[data-cmx]'); if (!b) return;
     const st = (CM.series[key] ||= {}), ext = new Set(st.ext || []), v = +b.dataset.v;
     if (b.dataset.cmx === 'add') ext.add(v); if (b.dataset.cmx === 'del') ext.delete(v); if (b.dataset.cmx === 'all') s.gaps.forEach(x => ext.add(x));

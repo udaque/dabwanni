@@ -415,3 +415,4 @@ html{touch-action:manipulation}
 /* 만화책 구매: 종이책·이북 */
 .cmfmt{margin:4px 0 10px}
 .cmfmt button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.cmother{display:inline-flex;align-items:center;margin:0 0 6px;padding:4px 10px;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--sub);font-size:12px;font-weight:600;white-space:nowrap}

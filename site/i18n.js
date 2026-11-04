@@ -161,6 +161,7 @@ const FMT = {
   quarterMonths: {ko: q => ['1~3월', '4~6월', '7~9월', '10~12월'][q - 1], ja: q => ['1〜3月', '4〜6月', '7〜9月', '10〜12月'][q - 1], en: q => ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]},
   units: {ko: {d: '일', h: '시간', m: '분', s: '초'}, ja: {d: '日', h: '時間', m: '分', s: '秒'}, en: {d: 'd', h: 'h', m: 'min', s: 'sec'}},
   allMissing: {ko: s => `${s}권 모두`, ja: s => `${s}巻すべて`, en: s => `All of vol. ${s}`},
+  otherFmtN: {ko: a => `${a[0]} ${a[1]}권 있음`, ja: a => `${a[0]}${a[1]}冊あり`, en: a => `${a[1]} in ${a[0]}`},
   missingVols: {ko: s => `${s}권 안 삼`, ja: s => `${s}巻が未購入`, en: s => `Missing vol. ${s}`},
   ownedTo: {ko: n => `${n}권까지 구매`, ja: n => `${n}巻まで購入`, en: n => `Owned to vol. ${n}`},
   volN: {ko: n => `${n}권`, ja: n => `${n}巻`, en: n => `Vol. ${n}`},
