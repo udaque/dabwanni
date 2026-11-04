@@ -540,6 +540,7 @@ function drill(row, items, extra){
 const WSCOPE = Object.assign({g: true, w: true}, store.get('wantScope', {}));   // 관심 탭에 보는 중·봤음도 보일지
 const SCOPE = Object.assign({g: false, i: false}, store.get('statsScope', {}));   // 봤음 기준 통계에 보는 중·관심만도 넣을지
 function renderStats(){
+  if (S.mode === 'comic' && typeof cmStats === 'function') return cmStats();      // 만화책 모드의 기록은 따로
   const L = [];
   for (const [k, m] of Object.entries(marks)) { const w = BYK.get(k); if (w && (m.w || m.i || m.ep || m.rate)) L.push([w, m]); }
   const watched = L.filter(([, m]) => m.w), watching = L.filter(([, m]) => m.ep && !m.w), want = L.filter(([, m]) => m.i || m.w || m.ep);

@@ -416,3 +416,13 @@ html{touch-action:manipulation}
 .cmfmt{margin:4px 0 10px}
 .cmfmt button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .cmother{display:inline-flex;align-items:center;margin:0 0 6px;padding:4px 10px;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--sub);font-size:12px;font-weight:600;white-space:nowrap}
+
+/* 만화책: 완결·작가·기록 */
+.pill.fin{background:var(--want);color:#fff}
+.cmfin{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 8px}
+.cmfin input{width:72px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:16px}
+.cmfin button,.cmmorebtn{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap}
+.cmmorebtn{margin-top:8px}
+.cmppl{margin:-4px 0 6px;font-size:12px}
+.cmkpis{grid-template-columns:repeat(2,1fr)}
+.cmkpis .kpi .lb{white-space:normal;line-height:1.3}

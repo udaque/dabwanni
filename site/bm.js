@@ -76,6 +76,18 @@
     var k = s.search(/구매|주문/); if (k >= 0) { cands.sort(function (a, b) { return Math.abs(a.i - k) - Math.abs(b.i - k); }); }
     return cands[0].v;
   }
+  // 「수신지 (지은이), 윤정원, 천지선 (감수)」 → [{n:수신지,r:지은이},{n:윤정원,r:감수},{n:천지선,r:감수}]
+  var ROLE = /\((지은이|글|그림|원작|옮긴이|번역|감수|엮은이|일러스트|글·그림|글\/그림|저자|역자|각색|캐릭터 원안|구성|만화|편집|사진|해설|기획|작화|그림·글)\)/;
+  function people(lis) {
+    var line = (lis || []).find(function (s) { return ROLE.test(s); }); if (!line) return [];
+    var out = [], pend = [];
+    line.split(/\s*,\s*/).forEach(function (seg) {
+      var m = seg.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+      if (m) { pend.push(m[1]); pend.forEach(function (n) { n = n.trim(); if (n && n.length < 40) out.push({ n: n, r: m[2] }); }); pend = []; }
+      else if (seg.trim()) pend.push(seg);
+    });
+    return out.slice(0, 20);
+  }
   function parse(doc) {
     var out = [], seen = {};
     // 알라딘 모바일 목록 칸 (구매내역·베스트 목록과 같은 틀)
@@ -84,7 +96,10 @@
       var b = boxes[i], id = b.getAttribute('itemId') || b.getAttribute('itemid'); if (!id || seen[id]) continue; seen[id] = 1;
       var tt = txt(b.querySelector('.b_book_t')).replace(/^\d+\.\s*/, ''), img = b.querySelector('img.i_cover, img');
       var pub = txt(b.querySelector('a[href*="PublisherSearch"]'));
-      out.push({ id: id, t: tt, cover: abs(img && (img.getAttribute('src') || '')), pub: pub, buy: buyDate(b.textContent || ''), sec: '' });
+      // 목록 칸 원문(작가·출판사·날짜·가격 줄)을 그대로 남겨 두고, 작가와 역할도 읽음
+      var lis = [].map.call(b.querySelectorAll('li'), function (li) { return txt(li); }).filter(Boolean);
+      var raw = (lis.length ? lis.join(' | ') : txt(b)).slice(0, 600);
+      out.push({ id: id, t: tt, cover: abs(img && (img.getAttribute('src') || '')), pub: pub, buy: buyDate(b.textContent || ''), sec: '', raw: raw, ppl: people(lis) });
     }
     // 그 밖의 화면(장바구니 등): 상품 링크마다 가장 가까운 상품 칸에서 제목·표지
     var links = doc.querySelectorAll('a[href*="ItemId="], a[href*="itemid="], a[href*="ItemID="]');
@@ -195,7 +210,7 @@
   var PK = 'dwbm_progress_v1';
   function loadProg() { return PROG; }
   function saveProg(p) { PROG = p; if (DB) put('p', 'prog', p); else { try { localStorage.setItem(PK, JSON.stringify(p)); } catch (e) {} } }
-  var slim = function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, sec: x.sec, price: x.price }; };
+  var slim = function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, sec: x.sec, price: x.price, raw: x.raw, ppl: x.ppl }; };
   var all = [], working = false, stopNow = false;
   var CONC = 4; try { CONC = Math.min(8, Math.max(1, +localStorage.getItem('dwbm_conc') || 4)); } catch (e) {}
   function concRow() {
@@ -213,6 +228,8 @@
   async function readList() {
     if (mode !== 'purchase') { all = parse(document); return; }
     var prog = loadProg(), start = 2, rows = 0, known = null;
+    // 예전 판에서 저장한 목록에는 작가 정보·목록 원문이 없음 → 목록만 처음부터 한 번 다시 읽음 (상품 정보는 기억해 둔 것을 씀)
+    if (prog && prog.items && prog.items.length && !prog.items.some(function (x) { return x.raw; })) prog = null;
     if (prog && prog.mode === 'purchase' && !prog.done && prog.items && prog.items.length) {
       all = prog.items; start = prog.lastPage + 1; rows = prog.rows || 0;
       msg.textContent = '지난번에 ' + prog.lastPage + '쪽까지 읽었습니다. ' + start + '쪽부터 이어서 읽습니다.';
@@ -315,7 +332,7 @@
   }
   // 보내기: 중간에 보내도 확인은 계속되고, 다 끝나면 마지막으로 한 번 더 보내면 됨 (다봤니 쪽은 겹치지 않게 합침)
   function send(final) {
-    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f, sid: x.sid, cats: x.cats }; });
+    var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f, sid: x.sid, cats: x.cats, raw: x.raw, ppl: x.ppl }; });
     if (!items.length) { msg.textContent = '아직 보낼 만화·라이트노벨이 없습니다.'; return; }
     var w = window.open(DW + '/#comics-import', 'dabwanni'), payload;
     if (mode === 'cart') {

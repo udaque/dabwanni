@@ -147,6 +147,12 @@ function seriesList(){
     for (let v = 1; v < s.max; v++) if (!s.vols.has(v) && !ext.has(v)) s.gaps.push(v);
     const last = s.items[s.items.length - 1]; s.cover = last.cover; s.pub = last.pub || s.pub;
     const st = CM.series[s.key] || {}; s.read = st.read || 0; s.ack = st.ack === s.gaps.join(',');
+    // 완결: 직접 표시한 마지막 권, 없으면 제목의 「완결」·「(총N권/완결)」에서 읽은 값
+    let auto = 0; s.items.forEach(it => { if (/완결/.test(it.orig || it.t || '') && !/미완결/.test(it.orig || it.t || '')) auto = Math.max(auto, (it.vols || []).slice(-1)[0] || 0); });
+    s.fin = st.fin === 0 ? 0 : (st.fin || auto || 0); s.finAuto = !st.fin && !!auto;
+    s.allBought = !!s.fin && s.max >= s.fin && !s.gaps.some(v => v <= s.fin);
+    s.allRead = !!s.fin && s.read >= s.fin;
+    s.ppl = []; const seenP = new Set(); s.items.forEach(it => (it.ppl || []).forEach(p => { const k2 = p.n + '|' + p.r; if (!seenP.has(k2)) { seenP.add(k2); s.ppl.push(p); } }));
   }
   return (SL_CACHE = [...S_.values()]);
 }
@@ -168,7 +174,7 @@ function seriesCard(s){
   return `<div class="card cmcard">
     <button class="kv" data-cm="open" data-k="${esc(s.key)}" aria-label="${esc(s.name)}"><span class="nokv">${t('표지 없음')}</span>${s.cover ? `<img src="${esc(s.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${s.eb ? '<span class="ebtag">e-book</span>' : ''}</button>
     <div class="meta"><div class="t1" data-cm="open" data-k="${esc(s.key)}">${esc(s.name)}</div><div class="t2">${esc(s.pub)}</div>
-      <div class="pills">${kindPill(s.kind)}<span class="pill">${esc(F('ownedTo', s.max || s.items.length))}</span></div>${warn}</div>
+      <div class="pills">${kindPill(s.kind)}<span class="pill">${esc(F('ownedTo', s.max || s.items.length))}</span>${s.fin ? `<span class="pill fin">${esc(F('finN', s.fin))}</span>` : ''}</div>${warn}</div>
     <div class="prog"><button class="step" data-cm="read-" data-k="${esc(s.key)}" aria-label="${t('읽은 권 빼기')}">−</button>
       <span class="now">${s.read}<small> / ${esc(F('volN', s.max || s.items.length))}</small></span>
       <button class="step" data-cm="read+" data-k="${esc(s.key)}" aria-label="${t('읽은 권 더하기')}">+</button></div></div>`;
@@ -183,7 +189,7 @@ function renderBuy(q){
   let L = ALL.filter(s => s.fmt === CMS.fmt);
   const counts = {all: L.length, c: L.filter(s => s.kind !== 'l').length, l: L.filter(s => s.kind === 'l').length};
   if (CMS.kind !== 'all') L = L.filter(s => (CMS.kind === 'l') === (s.kind === 'l'));
-  if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub).includes(nq)); }
+  if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub + s.ppl.map(p => p.n).join('')).includes(nq)); }      // 시리즈·출판사·작가 이름으로
   const gapN = L.filter(s => s.gaps.length).length;
   L.sort(CMS.sort === 'date' ? (a, b) => b.date.localeCompare(a.date) || tcmpS(a, b) : tcmpS);
   let h = guideHTML('cbuy');
@@ -258,6 +264,9 @@ function cmOpen(key){
   const o = otherFmt(s);
   const box = document.createElement('div'); box.id = 'editor';
   box.innerHTML = `<div class="ebox cmsheet" role="dialog" aria-modal="true"><h3>${esc(s.name)}</h3><p class="setnote">${esc([s.pub, s.kind === 'l' ? t('라이트노벨') : t('만화'), s.fmt === 'e' ? t('이북') : t('종이책')].join(' · '))}</p>
+    ${s.ppl.length ? `<p class="setnote cmppl">${esc(s.ppl.slice(0, 8).map(p => `${p.n} (${p.r})`).join(', '))}</p>` : ''}
+    <div class="cmfin">${s.fin ? `<span class="pill fin">${esc(F('finN', s.fin))}</span>${s.allBought ? `<span class="pill">${t('완결까지 다 삼')}</span>` : ''}${s.allRead ? `<span class="pill">${t('완결까지 다 읽음')}</span>` : ''}
+      <button data-cmf="off">${t('완결 해제')}</button>` : `<input id="cmfN" type="number" inputmode="numeric" value="${s.max || ''}" aria-label="${t('마지막 권')}"><button data-cmf="on">${t('완결 표시')}</button>`}</div>
     ${o ? `<button class="cmother" data-cmo="${esc(o.key)}">${esc(F('otherFmtN', [o.fmt === 'e' ? t('이북') : t('종이책'), o.vols.size || o.items.length]))} ›</button>` : ''}
     ${s.gaps.length ? `<p class="cmwarn ${s.ack ? 'acked' : ''}">${esc(F('missingVols', ranges(s.gaps)))}</p>
       <div class="cmext"><span class="setnote">${t('다른 곳에서 산 권을 누르세요')}</span><div class="pills">${s.gaps.map(v => `<button class="chip" data-cmx="add" data-v="${v}">${esc(F('volN', v))}</button>`).join('')}${s.gaps.length > 1 ? `<button class="chip on" data-cmx="all">${esc(F('allMissing', ranges(s.gaps)))}</button>` : ''}</div></div>` : ''}
@@ -272,6 +281,8 @@ function cmOpen(key){
     if (e.target === box) return box.remove();
     const ob = e.target.closest('[data-cmo]');
     if (ob) { const os = seriesList().find(x => x.key === ob.dataset.cmo); box.remove(); if (os) { CMS.fmt = os.fmt; store.set('cmFmt', os.fmt); if (S.tab === 'cbuy') cmRender(S.tab); cmOpen(os.key); } return; }      // 다른 형태의 같은 시리즈로
+    const fb = e.target.closest('[data-cmf]');
+    if (fb) { const st2 = (CM.series[key] ||= {}); st2.fin = fb.dataset.cmf === 'on' ? Math.max(1, parseInt(box.querySelector('#cmfN').value, 10) || s.max || 1) : 0; st2.u = Date.now(); cmSave(); box.remove(); cmOpen(key); if (S.tab === 'cbuy') cmRender(S.tab); return; }
     const b = e.target.closest('[data-cmx]'); if (!b) return;
     const st = (CM.series[key] ||= {}), ext = new Set(st.ext || []), v = +b.dataset.v;
     if (b.dataset.cmx === 'add') ext.add(v); if (b.dataset.cmx === 'del') ext.delete(v); if (b.dataset.cmx === 'all') s.gaps.forEach(x => ext.add(x));
@@ -306,7 +317,8 @@ window.addEventListener('message', e => {
   const pick = x => ({id: String(x.id), t: String(x.t || '').slice(0, 300), cover: /^https:\/\//.test(x.cover || '') ? x.cover : '', pub: String(x.pub || '').slice(0, 80),
     date: String(x.date || '').slice(0, 10), kind: x.kind === 'l' ? 'l' : 'c', eb: x.eb ? 1 : 0, price: +x.price || 0,
     ...(x.g != null ? {g: String(x.g).slice(0, 300)} : {}), ...(x.f != null ? {f: String(x.f).slice(0, 80)} : {}),
-    ...(x.sid ? {sid: String(x.sid).slice(0, 20)} : {}), ...(Array.isArray(x.cats) ? {cats: x.cats.slice(0, 6).map(p => String(p).slice(0, 120))} : {})});
+    ...(x.sid ? {sid: String(x.sid).slice(0, 20)} : {}), ...(Array.isArray(x.cats) ? {cats: x.cats.slice(0, 6).map(p => String(p).slice(0, 120))} : {}),
+    ...(Array.isArray(x.ppl) && x.ppl.length ? {ppl: x.ppl.slice(0, 20).map(p => ({n: String(p.n || '').slice(0, 40), r: String(p.r || '').slice(0, 12)})).filter(p => p.n)} : {}), ...(x.raw ? {raw: String(x.raw).slice(0, 600)} : {})});
   if (d.kind === 'purchase') {
     for (const x of d.items) { if (!x.id) continue; const it = pick(x), old = CM.items[it.id]; if (!old) added++;
       CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; delete CM.unres[it.id]; }
@@ -402,3 +414,37 @@ document.addEventListener('click', e => {
     delete CM.unres[f.id]; cmSave(); box.remove(); renderUnres();
   };
 });
+
+/* ---------- 만화책 기록 (애니 기록과 별개): 종이책·이북 따로 ---------- */
+function cmStats(){
+  const box = $('#stats'), ALL = seriesList(), fmt = CMS.fmt;
+  const L = ALL.filter(s => s.fmt === fmt), items = L.flatMap(s => s.items);
+  const fc = {p: ALL.filter(s => s.fmt === 'p').length, e: ALL.filter(s => s.fmt === 'e').length};
+  const fins = L.filter(s => s.fin), reading = L.filter(s => s.read > 0 && s.read < (s.fin || s.max)), unread = L.filter(s => !s.read);
+  const readVols = L.reduce((n, s) => n + Math.min(s.read, s.max || s.read), 0);
+  const kpi = (label, n) => `<div class="kpi"><div class="lb">${t(label)}</div><div class="v">${fmtN(n)}</div></div>`;      // 애니 기록과 같은 모양
+  const tally = (arr, keyf) => { const m = new Map(); arr.forEach(x => [].concat(keyf(x) || []).forEach(k => { if (k) m.set(k, (m.get(k) || 0) + 1); })); return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ko')); };
+  const bars = (title, rows, open) => {
+    if (!rows.length) return '';
+    const mx = rows[0][1], show = open ? rows : rows.slice(0, 15);
+    return `<div class="stbox"><h2>${t(title)}<span class="pill">${fmtN(rows.length)}</span></h2><div class="hbars">${show.map(([k, n]) => hbarRow(esc(k), [['w', n]], mx, n)).join('')}</div>${rows.length > 15 ? `<button class="cmmorebtn" data-cms="${esc(title)}">${t(open ? '접기' : '모두 보기')}</button>` : ''}</div>`;
+  };
+  const byYear = tally(items, it => (it.buy || '').slice(0, 4)).sort((a, b) => b[0].localeCompare(a[0]));
+  const role = rx => tally(items, it => (it.ppl || []).filter(p => rx.test(p.r)).map(p => p.n));
+  const noPpl = items.filter(it => !(it.ppl || []).length).length;
+  let h = `<div class="seg cmfmt">${[['p', '종이책'], ['e', '이북']].map(([v, l]) => `<button data-cmsf="${v}" class="${fmt === v ? 'on' : ''}">${t(l)}<span class="pill">${fmtN(fc[v])}</span></button>`).join('')}</div>
+  <div class="stbox"><h2>${t('모은 양')}</h2><div class="kpis cmkpis">
+    ${kpi('산 책', items.length)}${kpi('시리즈', L.length)}${kpi('완결 시리즈', fins.length)}${kpi('완결까지 다 산 시리즈', fins.filter(s => s.allBought).length)}
+    ${kpi('빠진 권 있는 시리즈', L.filter(s => s.gaps.length).length)}</div></div>
+  <div class="stbox"><h2>${t('읽은 양')}</h2><div class="kpis cmkpis">
+    ${kpi('읽은 권', readVols)}${kpi('읽는 중인 시리즈', reading.length)}${kpi('아직 안 읽은 시리즈', unread.length)}${kpi('완결까지 다 읽은 시리즈', fins.filter(s => s.allRead).length)}</div></div>`;
+  h += bars('종류', tally(L, s => s.kind === 'l' ? t('라이트노벨') : t('만화')), true);
+  h += bars('산 해', byYear, true);
+  h += bars('출판사', tally(items, it => it.pub), CMS.open?.['출판사']);
+  h += bars('지은이·그림·원작', role(/지은이|글|그림|원작|만화|작화|저자|일러스트|각색|캐릭터/), CMS.open?.['지은이·그림·원작']);
+  h += bars('옮긴이', role(/옮긴이|번역|역자/), CMS.open?.['옮긴이']);
+  if (noPpl) h += `<p class="setnote">${esc(F('noPeople', noPpl))}</p>`;
+  box.innerHTML = h;
+  box.querySelectorAll('[data-cmsf]').forEach(b => b.onclick = () => { CMS.fmt = b.dataset.cmsf; store.set('cmFmt', CMS.fmt); cmStats(); });
+  box.querySelectorAll('[data-cms]').forEach(b => b.onclick = () => { (CMS.open ||= {})[b.dataset.cms] = !CMS.open[b.dataset.cms]; cmStats(); });
+}
