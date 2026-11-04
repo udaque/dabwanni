@@ -34,7 +34,7 @@ function parseTitle(t){
   if (plus.length > 1 && plus[0].trim()) { c = plus[0].trim(); ed = '세트'; }
   // 세트의 권수 표시: 「(전6권)」 「(총8권/완결)」 「전4권」 → 1~N권
   let tot = c.match(/\s*\(?\s*(?:전|총)\s*(\d{1,3})\s*권[^)]*\)?\s*$/);
-  if (tot) { const n = +tot[1]; c = c.slice(0, tot.index).trim(); if (!/\d\s*[~∼～.·,]\s*\d+\s*(?:권|세트|합본)?\s*$/.test(c) && !/\s\d{1,3}$/.test(c)) { vols = []; for (let v = 1; v <= n && v <= 200; v++) vols.push(v); } ed = ed || '세트'; }
+  if (tot) { const n = +tot[1]; c = c.slice(0, tot.index).trim(); if (!/\d\s*[~∼～.·,\-]\s*\d+\s*(?:권|세트|합본)?\s*$/.test(c) && !/\s\d{1,3}$/.test(c)) { vols = []; for (let v = 1; v <= n && v <= 200; v++) vols.push(v); } ed = ed || '세트'; }
   // 닫히지 않은 끝 괄호(알라딘이 긴 제목을 잘라 보낸 경우)
   let um = c.match(/\s*\(([^()]*)$/);
   if (um) { if (ED_WORDS.test(um[1])) ed = ed || um[1].trim().replace(/\s.*$/, ''); c = c.slice(0, um.index).trim(); }
@@ -61,7 +61,7 @@ function parseTitle(t){
   }
   let vol = null, base = c;
   // 여러 권 묶음: 「1~3권」 「4~6」 「1.2 세트」 「1,2」 → 각 권
-  const rg = c.match(/^(.*?\S)\s*(\d{1,3})\s*(?:[~∼～]|[.·,](?=\s*\d))\s*(\d{1,3})\s*권?$/);
+  const rg = c.match(/^(.*?\S)\s*(\d{1,3})\s*(?:[~∼～]|[.·,\-](?=\s*\d))\s*(\d{1,3})\s*권?$/);      // 「1~10」 「1-10」 「1.2」
   if (rg && +rg[2] < +rg[3] && +rg[3] - +rg[2] < 60) {
     vols = []; for (let v = +rg[2]; v <= +rg[3]; v++) vols.push(v);
     base = rg[1].trim(); vol = +rg[3];
@@ -298,7 +298,7 @@ window.addEventListener('message', e => {
     for (const x of d.items) { if (!x.id) continue; const it = pick(x), old = CM.items[it.id]; if (!old) added++;
       CM.items[it.id] = {...old, ...it, own: 1, buy: String(x.buy || old?.buy || '').slice(0, 10), vol: volOf(it.t), u: now}; delete CM.unres[it.id]; }
     for (const f of (Array.isArray(d.fails) ? d.fails : [])) {
-      const id = String(f.id || ''); if (!id || CM.items[id] || CM.unresOff[id]) continue;
+      const id = String(f.id || ''); if (!id || hasItem(CM.items, id) || CM.unresOff[id]) continue;
       CM.unres[id] = {id, t: String(f.t || '').slice(0, 300), buy: String(f.buy || '').slice(0, 10), cover: /^https:\/\//.test(f.cover || '') ? f.cover : '', snip: String(f.snip || '').slice(0, 160), at: now};
     }
   } else if (d.kind === 'cart') {
@@ -312,13 +312,15 @@ window.addEventListener('message', e => {
 });
 
 /* ---------- 동기화에 넣기: 작품·시리즈는 바뀐 시각이 늦은 쪽, 장바구니 백업은 합쳐 최근 12개 ---------- */
+// 세트를 권마다 나눠 넣은 경우(「…#3」)도 넣은 것으로 침
+const hasItem = (items, id) => !!items[id] || Object.keys(items).some(k => k.startsWith(id + '#'));
 function cmMerge(L, R_){
   const out = {v: 1, items: {...(R_?.items || {})}, series: {...(R_?.series || {})}, carts: [], unres: {}, unresOff: {}};
   for (const [k, v] of Object.entries(L.items || {})) if (!out.items[k] || (v.u || 0) >= (out.items[k].u || 0)) out.items[k] = v;
   for (const [k, v] of Object.entries(L.series || {})) if (!out.series[k] || (v.u || 0) >= (out.series[k].u || 0)) out.series[k] = v;
   const seen = new Set(); for (const c of [...(L.carts || []), ...(R_?.carts || [])].sort((a, b) => b.at - a.at)) if (!seen.has(c.at)) { seen.add(c.at); out.carts.push(c); }
   out.unres = {...(R_?.unres || {}), ...(L.unres || {})}; out.unresOff = {...(R_?.unresOff || {}), ...(L.unresOff || {})};
-  for (const k of Object.keys(out.unres)) if (out.items[k] || out.unresOff[k]) delete out.unres[k];
+  for (const k of Object.keys(out.unres)) if (hasItem(out.items, k) || out.unresOff[k]) delete out.unres[k];
   return out;
 }
 
@@ -349,7 +351,7 @@ document.addEventListener('click', e => {
     <h4 class="cmh4">${t('시리즈 찾기')}</h4><input id="cmuQ" class="cmq" type="search" value="" placeholder="${esc(t('시리즈 이름'))}" autocomplete="off">
     <div class="cmpicks" id="cmuR"></div>
     <div class="cmsel" id="cmuSel"></div>
-    <label class="erow"><span>${t('권')}</span><input id="cmuV" type="number" inputmode="numeric" value="${esc(volOf(raw) || '')}"></label>
+    <label class="erow"><span>${t('권')}</span><input id="cmuV" type="text" inputmode="text" value="${esc((pv => pv.vols.length > 1 ? `${pv.vols[0]}~${pv.vols[pv.vols.length - 1]}` : pv.vol || '')(parseTitle(raw)))}" placeholder="3, 1~10, 1,3,5"></label>
     <div class="seg emode" id="cmuK"><button data-k="c" class="on">${t('만화')}</button><button data-k="l">${t('라이트노벨')}</button></div>
     <div class="ebtns"><button class="ecancel">${t('닫기')}</button><button class="esave" disabled>${t('저장')}</button></div></div>`;
   document.body.appendChild(box);
@@ -376,9 +378,13 @@ document.addEventListener('click', e => {
     showSel();
   };
   box.querySelector('.esave').onclick = () => {
-    const name = pickS ? pickS.name : newName, v = parseInt(box.querySelector('#cmuV').value, 10); if (!name) return;
-    const s = pickS, sid = s ? (s.items.find(i => i.sid) || {}).sid : undefined;
-    CM.items[f.id] = {id: f.id, t: v ? `${name} ${v}` : name, orig: f.t, own: 1, kind: s ? s.kind : kind, buy: f.buy, cover: f.cover, pub: s ? s.pub : '', man: 1, ...(sid ? {sid} : {}), u: Date.now()};
+    const name = pickS ? pickS.name : newName; if (!name) return;
+    // 권: 「3」, 「1~10」·「1-10」, 「1,3,5」 → 권마다 한 권씩 넣음 (세트 하나에서 여러 권)
+    const vs = []; String(box.querySelector('#cmuV').value).split(/[,，\s]+/).forEach(p => { const m = p.match(/^(\d{1,3})(?:\s*[~∼～\-]\s*(\d{1,3}))?$/); if (!m) return; const a = +m[1], z = m[2] ? +m[2] : a; for (let n = Math.min(a, z); n <= Math.max(a, z) && n - Math.min(a, z) < 200; n++) vs.push(n); });
+    const s = pickS, sid = s ? (s.items.find(i => i.sid) || {}).sid : undefined, now = Date.now();
+    const mk = v => ({t: v ? `${name} ${v}` : name, orig: f.t, own: 1, kind: s ? s.kind : kind, buy: f.buy, cover: f.cover, pub: s ? s.pub : '', man: 1, ...(sid ? {sid} : {}), u: now});
+    if (vs.length <= 1) CM.items[f.id] = {id: f.id, ...mk(vs[0])};
+    else vs.forEach(v => { const id = `${f.id}#${v}`; CM.items[id] = {id, ...mk(v)}; });
     delete CM.unres[f.id]; cmSave(); box.remove(); renderUnres();
   };
 });
