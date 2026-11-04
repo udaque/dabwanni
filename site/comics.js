@@ -1,7 +1,7 @@
 /* 다봤니 만화책: 알라딘 구매내역·장바구니를 북마클릿으로 가져와 시리즈별로 관리 (애니와 별개) */
 const CM = store.get('comics', {v: 1, items: {}, series: {}, carts: []});
 CM.items ||= {}; CM.series ||= {}; CM.carts ||= []; CM.unres ||= {}; CM.unresOff ||= {};      // unres: 알라딘에서 끝내 못 읽은 상품, unresOff: 목록에서 뺀 것
-const CMS = {kind: store.get('cmKind', 'all'), view: store.get('cmView', 'all'), sort: store.get('cmSort', 'name'), cart: 0, guide: false};
+const CMS = {fmt: store.get('cmFmt', 'p'), kind: store.get('cmKind', 'all'), view: store.get('cmView', 'all'), sort: store.get('cmSort', 'name'), cart: 0, guide: false};
 const ALADIN = ['https://www.aladin.co.kr', 'https://m.aladin.co.kr'];
 const BUY_URL = 'https://www.aladin.co.kr/m/mbest.aspx?BestType=OrderSave';
 const CART_URL = 'https://www.aladin.co.kr/m/mbasket.aspx?start=moheader';
@@ -94,7 +94,8 @@ function kindOf(it){
   return isC ? 'c' : isL ? 'l' : 'c';
 }
 const okDate = d => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(d || '');
-const seriesKey = it => norm(baseOf(it.t)) + '|' + kindOf(it);      // 같은 제목이라도 만화판·라이트노벨판은 따로
+const fmtOf = it => it.eb || /^\s*\[(?:전자책|eBook)\]/i.test(it.orig || it.t || '') ? 'e' : 'p';      // 종이책 p · 이북 e
+const seriesKey = it => norm(baseOf(it.t)) + '|' + kindOf(it) + '|' + fmtOf(it);      // 만화판·라이트노벨판, 종이책·이북은 따로
 // 빠진 권 표시: 이어지는 번호는 묶음 (1, 2, 3, 5 → 「1~3, 5」)
 function ranges(a){ const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}~${a[j]}` : `${a[i]}`); i = j; } return out.join(', '); }
 
@@ -110,7 +111,7 @@ function seriesList(){
   // 한글만 같은 이름(「유루캠△」·「유루캠」, 「플라잉 위치(flying witch)」·「플라잉 위치」, 「뉴 게임(NEW GAME!)」·「뉴 게임! New Game!」)도 이어 붙임.
   // 단, 영문 부분이 서로 다르고 괄호 속 원제도 아니면(「일하는 세포 BLACK」, 「진격의 거인 LOST GIRLS」 같은 외전) 붙이지 않음
   const latinOut = b => b.replace(/\([^)]*\)/g, '').toLowerCase().replace(/[^a-z]/g, ''), latinAll = b => b.toLowerCase().replace(/[^a-z]/g, '');
-  const hkey = it => { const b = baseOf(it.t), h = b.replace(/[^가-힣0-9]/g, ''); return h.length >= 3 ? 'h:' + h + '|' + kindOf(it) : null; };
+  const hkey = it => { const b = baseOf(it.t), h = b.replace(/[^가-힣0-9]/g, ''); return h.length >= 3 ? 'h:' + h + '|' + kindOf(it) + '|' + fmtOf(it) : null; };
   const hLat = new Map();      // 한글 열쇠마다 처음 본 이름의 영문 부분
   for (const it of own) { const tk = seriesKey(it); add(tk); const h = hkey(it); if (h) {
       const b = baseOf(it.t), lo = latinOut(b), la = latinAll(b);
@@ -118,13 +119,13 @@ function seriesList(){
       const ok = hLat.get(h).find(([lo2, la2]) => lo === lo2 || la === la2 || (!lo && la && la === la2) || (!lo && !lo2) );
       hLat.get(h).push([lo, la, tk]);
       if (ok) { const a = find(tk), c2 = find(ok[2]); if (a !== c2) par.set(c2, a); }
-    } if (it.sid) { const sk = 's:' + it.sid + '|' + kindOf(it); add(sk); const a = find(tk), b = find(sk); if (a !== b) par.set(b, a); } }
+    } if (it.sid) { const sk = 's:' + it.sid + '|' + kindOf(it) + '|' + fmtOf(it); add(sk); const a = find(tk), b = find(sk); if (a !== b) par.set(b, a); } }
   const cnt = new Map();     // 묶음마다 가장 많이 쓰인 제목 열쇠를 대표로 (읽은 권 등 저장 열쇠가 바뀌지 않게)
   for (const it of own) { const r = find(seriesKey(it)), m = cnt.get(r) || new Map(); m.set(seriesKey(it), (m.get(seriesKey(it)) || 0) + 1); cnt.set(r, m); }
   const rep = new Map([...cnt].map(([r, m]) => [r, [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]]));
   for (const it of own) {
     const k = rep.get(find(seriesKey(it))); let s = S_.get(k);
-    if (!s) S_.set(k, s = {key: k, name: '', pub: it.pub || '', kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
+    if (!s) S_.set(k, s = {key: k, name: '', pub: it.pub || '', fmt: fmtOf(it), kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
     const pt = parseTitle(it.t); it.vol = pt.vol; it.vols = pt.vols; it.ed = pt.ed;
     s.items.push(it); it.vols.forEach(v => s.vols.add(v)); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
@@ -138,8 +139,9 @@ function seriesList(){
       first.vol = 1; first.vols = [1]; s.vols.add(1);
     }
     s.items.sort((a, b) => (a.vol || 0) - (b.vol || 0) || String(a.date).localeCompare(String(b.date)));
-    const old = s.key.replace(/\|[cl]$/, '');
-    if (!CM.series[s.key] && CM.series[old]) CM.series[s.key] = {...CM.series[old]};      // 예전 열쇠(종류 없음)로 저장한 읽은 권·다른 곳에서 산 권 옮김
+    // 예전 열쇠(종류·형태 없음)로 저장한 읽은 권·다른 곳에서 산 권·경고 확인 옮김
+    const old1 = s.key.replace(/\|[pe]$/, ''), old0 = old1.replace(/\|[cl]$/, '');
+    if (!CM.series[s.key] && (CM.series[old1] || CM.series[old0])) CM.series[s.key] = {...(CM.series[old1] || CM.series[old0])};      // 예전 열쇠(종류 없음)로 저장한 읽은 권·다른 곳에서 산 권 옮김
     const ext = new Set((CM.series[s.key] || {}).ext || []); s.ext = [...ext].sort((a, b) => a - b);      // 다른 곳에서 산 권
     s.max = Math.max(0, ...s.vols, ...ext); s.gaps = [];
     for (let v = 1; v < s.max; v++) if (!s.vols.has(v) && !ext.has(v)) s.gaps.push(v);
@@ -177,7 +179,8 @@ function chipRow(label, name, cur, opts){
 }
 function seg(name, cur, opts){ return `<div class="seg cmseg">${opts.map(([v, l]) => `<button data-cm="${name}" data-v="${v}" class="${cur === v ? 'on' : ''}">${t(l)}</button>`).join('')}</div>`; }
 function renderBuy(q){
-  let L = seriesList();
+  const ALL = seriesList(), fc = {p: ALL.filter(s => s.fmt === 'p').length, e: ALL.filter(s => s.fmt === 'e').length};
+  let L = ALL.filter(s => s.fmt === CMS.fmt);
   const counts = {all: L.length, c: L.filter(s => s.kind !== 'l').length, l: L.filter(s => s.kind === 'l').length};
   if (CMS.kind !== 'all') L = L.filter(s => (CMS.kind === 'l') === (s.kind === 'l'));
   if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub).includes(nq)); }
@@ -185,7 +188,8 @@ function renderBuy(q){
   L.sort(CMS.sort === 'date' ? (a, b) => b.date.localeCompare(a.date) || tcmpS(a, b) : tcmpS);
   let h = guideHTML('cbuy');
   if (!Object.keys(CM.items).length) return h + `<div class="stbox"><p class="stempty">${t('아직 가져온 구매내역이 없습니다.')}</p></div>`;
-  h += `<div class="cmctl">
+  h += `<div class="seg cmfmt">${[['p', '종이책'], ['e', '이북']].map(([v, l]) => `<button data-cm="fmt" data-v="${v}" class="${CMS.fmt === v ? 'on' : ''}">${t(l)}<span class="pill">${fmtN(fc[v])}</span></button>`).join('')}</div>
+  <div class="cmctl">
     <div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${[['all', '전체'], ['c', '만화'], ['l', '라이트노벨']].map(([v, l]) => `<button class="chip ${CMS.kind === v ? 'on' : ''}" data-cm="kind" data-v="${v}">${t(l)}<span class="pill">${fmtN(counts[v])}</span></button>`).join('')}</div></div>
     ${chipRow('보기', 'view', CMS.view, [['all', '전체'], ['pub', '출판사별'], ['gap', '빠진 권 있음', gapN]])}
     ${chipRow('정렬', 'sort', CMS.sort, [['name', '이름순'], ['date', '발매일순']])}</div>`;
@@ -274,7 +278,7 @@ document.addEventListener('click', e => {
   if (a === 'open') return cmOpen(k);
   if (a === 'guide') { CMS.guide = !CMS.guide; return cmRender(S.tab); }
   if (a === 'bmcopy') { navigator.clipboard?.writeText(BM_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
-  if (a === 'kind' || a === 'view' || a === 'sort') { CMS[a] = el.dataset.v; store.set('cm' + a[0].toUpperCase() + a.slice(1), CMS[a]); return cmRender(S.tab); }
+  if (a === 'kind' || a === 'view' || a === 'sort' || a === 'fmt') { CMS[a] = el.dataset.v; store.set('cm' + a[0].toUpperCase() + a.slice(1), CMS[a]); return cmRender(S.tab); }
   if (a === 'snap') { CMS.cart = +el.dataset.v; return cmRender(S.tab); }
   if (a === 'snapdel') { if (!confirm(t('이 장바구니 백업을 지울까요?'))) return; CM.carts.splice(+el.dataset.v, 1); CMS.cart = 0; cmSave(); return cmRender(S.tab); }
   const st = (CM.series[k] ||= {});
@@ -339,7 +343,8 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-cmu]'); if (!b) return;
   const f = CM.unres[b.dataset.id]; if (!f) return;
   if (b.dataset.cmu === 'off') { CM.unresOff[f.id] = 1; delete CM.unres[f.id]; cmSave(); return renderUnres(); }
-  const S_ = seriesList(), raw = String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, ''), base = baseOf(raw);
+  const ffmt = /^\s*\[(?:전자책|eBook)\]/i.test(f.t) ? 'e' : 'p';      // 이북 상품이면 이북 시리즈 중에서
+  const S_ = seriesList().filter(s => s.fmt === ffmt), raw = String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, ''), base = baseOf(raw);
   // 비슷한 정도: 두 글자 묶음 겹침(다이스 계수) + 한쪽이 다른 쪽을 품으면 가산
   const bg = s => { const n = norm(s), r = new Set(); for (let k = 0; k < n.length - 1; k++) r.add(n.slice(k, k + 2)); return r; };
   const sim = (a, b) => { const A = bg(a), B = bg(b); if (!A.size || !B.size) return 0; let x = 0; A.forEach(v => { if (B.has(v)) x++; }); const n1 = norm(a), n2 = norm(b); return 2 * x / (A.size + B.size) + (n1 && n2 && (n1.includes(n2) || n2.includes(n1)) ? 0.5 : 0); };

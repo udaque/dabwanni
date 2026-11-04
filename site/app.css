@@ -411,3 +411,7 @@ html{touch-action:manipulation}
 .cmnew b{color:var(--want)}
 .cmsel{margin:8px 0;font-size:14px;color:var(--sub);min-height:20px}.cmsel b{color:var(--ink)}
 .esave[disabled]{opacity:.45}
+
+/* 만화책 구매: 종이책·이북 */
+.cmfmt{margin:4px 0 10px}
+.cmfmt button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
