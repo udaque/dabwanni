@@ -337,21 +337,47 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-cmu]'); if (!b) return;
   const f = CM.unres[b.dataset.id]; if (!f) return;
   if (b.dataset.cmu === 'off') { CM.unresOff[f.id] = 1; delete CM.unres[f.id]; cmSave(); return renderUnres(); }
-  const S_ = seriesList(), base = baseOf(String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, '')), guess = S_.find(s => norm(s.name) === norm(base));
+  const S_ = seriesList(), raw = String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, ''), base = baseOf(raw);
+  // 비슷한 정도: 두 글자 묶음 겹침(다이스 계수) + 한쪽이 다른 쪽을 품으면 가산
+  const bg = s => { const n = norm(s), r = new Set(); for (let k = 0; k < n.length - 1; k++) r.add(n.slice(k, k + 2)); return r; };
+  const sim = (a, b) => { const A = bg(a), B = bg(b); if (!A.size || !B.size) return 0; let x = 0; A.forEach(v => { if (B.has(v)) x++; }); const n1 = norm(a), n2 = norm(b); return 2 * x / (A.size + B.size) + (n1 && n2 && (n1.includes(n2) || n2.includes(n1)) ? 0.5 : 0); };
+  const scored = S_.map(s => ({s, v: sim(base, s.name)})).filter(o => o.v > 0.25).sort((a, b) => b.v - a.v).slice(0, 5);
+  const row = s => `<button class="cmpick" data-key="${esc(s.key)}"><b>${esc(s.name)}</b><span class="s">${esc([s.pub, s.kind === 'l' ? t('라이트노벨') : t('만화'), F('ownedTo', s.max || s.items.length)].filter(Boolean).join(' · '))}</span></button>`;
   const box = document.createElement('div'); box.id = 'editor';
   box.innerHTML = `<div class="ebox" role="dialog" aria-modal="true"><h3>${t('시리즈에 넣기')}</h3><p class="setnote">${esc(f.t)}</p>
-    <label class="erow"><span>${t('시리즈')}</span><input id="cmuS" list="cmuList" value="${esc(guess ? guess.name : base)}"></label>
-    <datalist id="cmuList">${S_.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist>
-    <label class="erow"><span>${t('권')}</span><input id="cmuV" type="number" inputmode="numeric" value="${esc(volOf(String(f.t).replace(/^\s*(\[[^\]]*\]\s*)+/, '')) || '')}"></label>
-    <div class="seg emode"><button data-k="c" class="${(guess?.kind || 'c') === 'c' ? 'on' : ''}">${t('만화')}</button><button data-k="l" class="${guess?.kind === 'l' ? 'on' : ''}">${t('라이트노벨')}</button></div>
-    <div class="ebtns"><button class="ecancel">${t('닫기')}</button><button class="esave">${t('저장')}</button></div></div>`;
+    ${scored.length ? `<h4 class="cmh4">${t('비슷한 시리즈')}</h4><div class="cmpicks">${scored.map(o => row(o.s)).join('')}</div>` : ''}
+    <h4 class="cmh4">${t('시리즈 찾기')}</h4><input id="cmuQ" class="cmq" type="search" value="" placeholder="${esc(t('시리즈 이름'))}" autocomplete="off">
+    <div class="cmpicks" id="cmuR"></div>
+    <div class="cmsel" id="cmuSel"></div>
+    <label class="erow"><span>${t('권')}</span><input id="cmuV" type="number" inputmode="numeric" value="${esc(volOf(raw) || '')}"></label>
+    <div class="seg emode" id="cmuK"><button data-k="c" class="on">${t('만화')}</button><button data-k="l">${t('라이트노벨')}</button></div>
+    <div class="ebtns"><button class="ecancel">${t('닫기')}</button><button class="esave" disabled>${t('저장')}</button></div></div>`;
   document.body.appendChild(box);
-  let kind = guess?.kind || 'c';
-  box.querySelectorAll('[data-k]').forEach(x => x.onclick = () => { kind = x.dataset.k; box.querySelectorAll('[data-k]').forEach(y => y.classList.toggle('on', y === x)); });
-  box.querySelector('.ecancel').onclick = () => box.remove(); box.onclick = ev => { if (ev.target === box) box.remove(); };
+  let pickS = null, newName = '', kind = 'c';
+  const setKind = k => { kind = k; box.querySelectorAll('#cmuK [data-k]').forEach(y => y.classList.toggle('on', y.dataset.k === k)); };
+  const showSel = () => {
+    box.querySelector('#cmuSel').innerHTML = pickS ? `${t('선택')}: <b>${esc(pickS.name)}</b>` : newName ? `${t('새 시리즈')}: <b>${esc(newName)}</b>` : '';
+    box.querySelector('.esave').disabled = !(pickS || newName);
+    box.querySelectorAll('.cmpick').forEach(x => x.classList.toggle('on', !!pickS && x.dataset.key === pickS.key));
+  };
+  const search = () => {
+    const q = box.querySelector('#cmuQ').value.trim(), nq = norm(q);
+    const R0 = !nq ? [] : S_.map(s => ({s, v: norm(s.name).includes(nq) ? 2 + nq.length / Math.max(1, norm(s.name).length) : sim(q, s.name)})).filter(o => o.v > 0.3).sort((a, b) => b.v - a.v).slice(0, 20);
+    box.querySelector('#cmuR').innerHTML = R0.map(o => row(o.s)).join('') + (q ? `<button class="cmpick cmnew" data-new="1"><b>${esc(t('새 시리즈로'))}: ${esc(q)}</b></button>` : '');
+  };
+  box.querySelector('#cmuQ').oninput = search;
+  box.querySelectorAll('#cmuK [data-k]').forEach(x => x.onclick = () => setKind(x.dataset.k));
+  box.querySelector('.ecancel').onclick = () => box.remove();
+  box.onclick = ev => {
+    if (ev.target === box) return box.remove();
+    const p = ev.target.closest('.cmpick'); if (!p) return;
+    if (p.dataset.new) { newName = box.querySelector('#cmuQ').value.trim(); pickS = null; }
+    else { pickS = S_.find(s => s.key === p.dataset.key); newName = ''; if (pickS) setKind(pickS.kind === 'l' ? 'l' : 'c'); }
+    showSel();
+  };
   box.querySelector('.esave').onclick = () => {
-    const name = box.querySelector('#cmuS').value.trim(), v = parseInt(box.querySelector('#cmuV').value, 10); if (!name) return;
-    const s = S_.find(x => norm(x.name) === norm(name)), sid = s ? (s.items.find(i => i.sid) || {}).sid : undefined;
+    const name = pickS ? pickS.name : newName, v = parseInt(box.querySelector('#cmuV').value, 10); if (!name) return;
+    const s = pickS, sid = s ? (s.items.find(i => i.sid) || {}).sid : undefined;
     CM.items[f.id] = {id: f.id, t: v ? `${name} ${v}` : name, orig: f.t, own: 1, kind: s ? s.kind : kind, buy: f.buy, cover: f.cover, pub: s ? s.pub : '', man: 1, ...(sid ? {sid} : {}), u: Date.now()};
     delete CM.unres[f.id]; cmSave(); box.remove(); renderUnres();
   };
