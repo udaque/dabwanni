@@ -137,8 +137,14 @@
   }
   var liText = function (li) { return (li.match(/>([^<>]+)<\/a>/g) || []).map(function (x) { return x.replace(/<\/a>|>/g, '').trim(); }).filter(Boolean).join(' > '); };
   function failed(why, old) { fails[why] = (fails[why] || 0) + 1; return { fail: why, old: old }; }
-  async function detail(id) {
+  var NOPAGE_T = /^\s*\[(?:온라인중고|중고|증정품|사은품|굿즈|기프트|문구)\]/;                     // 목록 제목만 봐도 책 상품 화면이 없는 상품
+  var NOPAGE_S = /비공개 상태|판매가 종료|판매 종료|판매중지|존재하지 않는|삭제된 상품|상품 정보가 없/;     // 화면 문구로 바로 알 수 있는 영구 실패
+  async function detail(id, title) {
     var old = cache[id];
+    if (title && NOPAGE_T.test(title) && !(old && old.mv && old.cats)) {
+      var np = Object.assign({}, old || {}, { perm: 1, k: '', snip: (title.match(NOPAGE_T) || [''])[0].replace(/[\[\]\s]/g, '') + ' 상품' });
+      cache[id] = np; put('c', id, np); return np;
+    }
     if (old && ((old.mv && old.cats) || old.perm)) return old;      // 상세 조각까지 읽은 책, 여러 번 읽어도 상품 화면이 아닌 책은 건너뜀
     var d = { k: '', mv: 1 };
     try {
@@ -172,11 +178,12 @@
     } catch (e) { return failed('연결', old); }
     if (!d.t && !d.adult) {
       // 정상 상품 화면이 아님. 무슨 화면인지 짧게 남겨 두고(알림 문구·제목·첫 글자), 일시적일 수 있으니 다시 시도.
-      // 쉬었다가 다시 읽어도 같은 화면이 3번 연속 나오면 상품 화면이 원래 없는 것으로 보고 더 읽지 않음(「건너뛴 상품」으로 따로 보여 줌)
+      // 비공개·판매 종료처럼 원래 화면이 없는 경우는 바로, 모르는 화면은 한 번 더 읽어 같으면 더 읽지 않음(「건너뛴 상품」으로 따로 보여 줌)
       var snip = ((h.match(/alert\(['"]([^'"]{1,120})/) || [])[1] || (h.match(/<title>([^<]{1,80})/) || [])[1] || h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || ('빈 화면 ' + h.length + '자'));
-      var same = old && old.snip === snip ? (old.same || 1) + 1 : 1, keep = Object.assign({}, old || {}, { bad: ((old && old.bad) || 0) + 1, snip: snip, same: same });
-      // 같은 화면이 3번 연속 (쉬었다가 다시 읽어도 같음)
-      if (same >= 3) { keep.perm = 1; keep.k = keep.k || ''; cache[id] = keep; put('c', id, keep); return keep; }
+      // 비공개·판매 종료 등은 처음 한 번에 확정
+      var same = (old && old.snip === snip ? (old.same || 1) + 1 : 1) + (NOPAGE_S.test(snip) ? 9 : 0), keep = Object.assign({}, old || {}, { bad: ((old && old.bad) || 0) + 1, snip: snip, same: same });
+      // 모르는 화면은 한 번 더 읽어서 같으면 확정
+      if (same >= 2) { keep.perm = 1; keep.k = keep.k || ''; cache[id] = keep; put('c', id, keep); return keep; }
       cache[id] = keep; put('c', id, keep);
       return failed('다른 화면', old && old.k ? old : null);
     }
@@ -264,9 +271,9 @@
     var worker = async function () {
       while (!stopNow && queue.length) {
         var x = queue.shift(), had = !!(cache[x.id] && cache[x.id].mv && cache[x.id].cats);
-        var d = await detail(x.id); fill(x, d); if (!round) done++;
+        var d = await detail(x.id, x.t); fill(x, d); if (!round) done++;
         if (!had && !d.fail) fresh0++;
-        if (d.fail) { streak++; if (streak >= 8) { msg.textContent = '알라딘 응답이 원활하지 않아 잠시 쉬었다가 이어서 읽습니다…'; await sleep(20000); streak = 0; } }
+        if (d.fail) { streak++; if (streak >= 8) { await sleep(3000); streak = 0; } }
         else streak = 0;
         showing();
         if (!had) await sleep(150);
@@ -276,9 +283,9 @@
     await Promise.all(Array.from({ length: CONC }, worker));
     // 실패한 책만 모아 쉬었다가 다시 (최대 8번, 갈수록 오래 쉼, 동시에 읽는 수의 절반)
     var retryFailed = async function () {
-    for (round = 1; round <= 8 && !stopNow; round++) {
+    for (round = 1; round <= 1 && !stopNow; round++) {
       queue = all.filter(function (x) { return x.failed && !x.skip; }); if (!queue.length) break;
-      msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 ' + (round * 5) + '초 뒤 다시 읽습니다…'; await sleep(round * 5000);
+      msg.textContent = '읽기 실패한 책 ' + queue.length + '권을 다시 읽습니다…'; await sleep(1000);
       await Promise.all(Array.from({ length: Math.max(1, Math.ceil(CONC / 2)) }, worker));      // 다시 읽기는 절반으로 천천히
     }
     round = 0;
