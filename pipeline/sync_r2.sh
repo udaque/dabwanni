@@ -10,10 +10,14 @@ if [ -z "${R2_BUCKET:-}" ]; then echo "R2 설정이 없어 건너뜁니다."; ex
 export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
 EP="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 S3="aws s3 --endpoint-url $EP --only-show-errors"
+# R2 업로드가 「최소 전송 속도 미달」로 끊기는 일이 있어: 동시에 올리는 양을 줄이고, 큰 파일은 작은 조각으로, 실패하면 쉬었다가 다시 (같은 파일은 sync가 건너뜀)
+aws configure set default.s3.max_concurrent_requests 4
+aws configure set default.s3.multipart_chunksize 16MB
+retry() { local n=0; until "$@"; do n=$((n+1)); if [ $n -ge 4 ]; then return 1; fi; echo "다시 시도 $n/3 (30초 뒤)"; sleep $((30*n)); done; }
 mkdir -p raw .r2
 case "$1" in
   pull)
-    $S3 sync "s3://$R2_BUCKET/raw/" .r2/ || { echo "R2에서 받지 못했습니다 (첫 실행이면 정상)"; exit 0; }
+    retry $S3 sync "s3://$R2_BUCKET/raw/" .r2/ || { echo "R2에서 받지 못했습니다 (첫 실행이면 정상)"; exit 0; }
     for f in .r2/*.tar.zst; do [ -e "$f" ] || continue; tar --zstd -xf "$f" -C raw; done
     cp -f .r2/_runs.json .r2/_catalog.json raw/ 2>/dev/null || true
     echo "복원: $(ls raw | wc -l)개 항목" ;;
@@ -39,8 +43,8 @@ json.dump(out, open('.r2/_runs.json', 'w'), indent=1)
 PY
       rm -f .r2/_runs.remote.json
     fi
-    $S3 sync .r2/ "s3://$R2_BUCKET/raw/"
+    retry $S3 sync .r2/ "s3://$R2_BUCKET/raw/"
     echo "보관 완료: $(du -sh .r2 | cut -f1)" ;;
   logs)
-    $S3 cp --recursive logs/ "s3://$R2_BUCKET/logs/$(date -u +%Y%m%d-%H%M)/" ;;
+    retry $S3 cp --recursive logs/ "s3://$R2_BUCKET/logs/$(date -u +%Y%m%d-%H%M)/" ;;
 esac
