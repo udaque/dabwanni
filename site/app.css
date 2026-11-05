@@ -426,3 +426,7 @@ html{touch-action:manipulation}
 .cmppl{margin:-4px 0 6px;font-size:12px}
 .cmkpis{grid-template-columns:repeat(2,1fr)}
 .cmkpis .kpi .lb{white-space:normal;line-height:1.3}
+
+/* 만화책 기록: 종이책 만화·종이책 라이트노벨·이북 만화·이북 라이트노벨 */
+.dot.pc,.hbars .bar i.pc{background:var(--onair)}.dot.pl,.hbars .bar i.pl{background:var(--watching)}
+.dot.ec,.hbars .bar i.ec{background:var(--want)}.dot.el,.hbars .bar i.el{background:#8B6CF0}

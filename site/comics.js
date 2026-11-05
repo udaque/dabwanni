@@ -415,36 +415,57 @@ document.addEventListener('click', e => {
   };
 });
 
-/* ---------- 만화책 기록 (애니 기록과 별개): 종이책·이북 따로 ---------- */
+/* ---------- 만화책 기록 (애니 기록과 별개). 애니 기록과 같은 방식:
+   종이책·이북 × 만화·라이트노벨 4가지를 색으로 나누고, 위에서 보일 것을 고르며, 막대를 누르면 해당 시리즈가 펼쳐짐 ---------- */
+const CCAT = [['pc', '종이책 만화'], ['pl', '종이책 라이트노벨'], ['ec', '이북 만화'], ['el', '이북 라이트노벨']];
+const CSCOPE = Object.assign({pc: true, pl: true, ec: true, el: true}, store.get('cmScope', {}));
+const catOf = s => s.fmt + (s.kind === 'l' ? 'l' : 'c');
+let cmDrop = 0;
 function cmStats(){
-  const box = $('#stats'), ALL = seriesList(), fmt = CMS.fmt;
-  const L = ALL.filter(s => s.fmt === fmt), items = L.flatMap(s => s.items);
-  const fc = {p: ALL.filter(s => s.fmt === 'p').length, e: ALL.filter(s => s.fmt === 'e').length};
+  const box = $('#stats'), ALL = seriesList();
+  const L = ALL.filter(s => CSCOPE[catOf(s)]);
+  const cnt = {}; CCAT.forEach(([k]) => cnt[k] = ALL.filter(s => catOf(s) === k).reduce((n, s) => n + s.items.length, 0));
+  // 묶음 막대: 칸마다 4가지 색으로 쌓고, 누르면 그 칸에 든 시리즈 목록이 펼쳐짐
+  const group = (pairs) => {      // pairs: [칸 이름, 시리즈, 권 수]
+    const m = new Map();
+    for (const [k, s, n] of pairs) { if (!k) continue; const o = m.get(k) || {n: 0, pc: 0, pl: 0, ec: 0, el: 0, ser: new Map()}; o.n += n; o[catOf(s)] += n; o.ser.set(s.key, (o.ser.get(s.key) || 0) + n); m.set(k, o); }
+    return [...m];
+  };
+  const drill = (row, ser) => {
+    const id = 'cd' + (++cmDrop), keyed = new Map(ALL.map(s => [s.key, s]));
+    const list = [...ser].sort((a, b) => b[1] - a[1]).map(([k, n]) => { const s = keyed.get(k); return s ? `<div class="varow"><i class="dot ${catOf(s)}"></i><button class="link" data-cmopen="${esc(k)}">${esc(s.name)}</button><span class="pill">${esc(F('volN', n))}</span></div>` : ''; }).join('');
+    return row.replace('<span class="bar">', `<span class="bar" data-tog="${id}" role="button" tabindex="0">`) + `<div class="valist" data-list="${id}" hidden>${list}</div>`;
+  };
+  const one = (title_, rows, opt = {}) => {
+    if (!rows.length) return '';
+    const mx = Math.max(1, ...rows.map(([, o]) => o.n));      // 최댓값은 모든 칸 중 가장 큰 값
+    const open = CMS.open?.[title_], show = open || rows.length <= 15 ? rows : rows.slice(0, 15);
+    return `<div class="stbox"><h2>${t(title_)}<span class="pill">${fmtN(rows.length)}</span></h2><div class="hbars">${show.map(([k, o]) => drill(hbarRow(esc(k), CCAT.map(([c]) => [c, o[c]]), mx, o.n), o.ser)).join('')}</div>${rows.length > 15 ? `<button class="cmmorebtn" data-cmmore="${esc(title_)}">${t(open ? '접기' : '모두 보기')}</button>` : ''}</div>`;
+  };
+  const byN = rows => rows.sort((a, b) => b[1].n - a[1].n || String(a[0]).localeCompare(String(b[0]), 'ko'));
+  const per = (f) => L.flatMap(s => s.items.flatMap(it => [].concat(f(it) || []).map(k => [k, s, 1])));
   const fins = L.filter(s => s.fin), reading = L.filter(s => s.read > 0 && s.read < (s.fin || s.max)), unread = L.filter(s => !s.read);
   const readVols = L.reduce((n, s) => n + Math.min(s.read, s.max || s.read), 0);
-  const kpi = (label, n) => `<div class="kpi"><div class="lb">${t(label)}</div><div class="v">${fmtN(n)}</div></div>`;      // 애니 기록과 같은 모양
-  const tally = (arr, keyf) => { const m = new Map(); arr.forEach(x => [].concat(keyf(x) || []).forEach(k => { if (k) m.set(k, (m.get(k) || 0) + 1); })); return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ko')); };
-  const bars = (title, rows, open) => {
-    if (!rows.length) return '';
-    const mx = rows[0][1], show = open ? rows : rows.slice(0, 15);
-    return `<div class="stbox"><h2>${t(title)}<span class="pill">${fmtN(rows.length)}</span></h2><div class="hbars">${show.map(([k, n]) => hbarRow(esc(k), [['w', n]], mx, n)).join('')}</div>${rows.length > 15 ? `<button class="cmmorebtn" data-cms="${esc(title)}">${t(open ? '접기' : '모두 보기')}</button>` : ''}</div>`;
-  };
-  const byYear = tally(items, it => (it.buy || '').slice(0, 4)).sort((a, b) => b[0].localeCompare(a[0]));
-  const role = rx => tally(items, it => (it.ppl || []).filter(p => rx.test(p.r)).map(p => p.n));
-  const noPpl = items.filter(it => !(it.ppl || []).length).length;
-  let h = `<div class="seg cmfmt">${[['p', '종이책'], ['e', '이북']].map(([v, l]) => `<button data-cmsf="${v}" class="${fmt === v ? 'on' : ''}">${t(l)}<span class="pill">${fmtN(fc[v])}</span></button>`).join('')}</div>
+  const kpi = (label, n, cls) => `<div class="kpi"><div class="lb">${cls ? `<span class="dot ${cls}"></span>` : ''}${t(label)}</div><div class="v">${fmtN(n)}</div></div>`;
+  const items = L.flatMap(s => s.items);
+  let h = `<div class="stscope" id="cmScope">${CCAT.map(([k, l]) => `<button data-csc="${k}" class="${CSCOPE[k] ? 'on' : ''}"><i class="dot ${k}"></i>${t(l)}<span class="pill">${fmtN(cnt[k])}</span></button>`).join('')}</div>
   <div class="stbox"><h2>${t('모은 양')}</h2><div class="kpis cmkpis">
-    ${kpi('산 책', items.length)}${kpi('시리즈', L.length)}${kpi('완결 시리즈', fins.length)}${kpi('완결까지 다 산 시리즈', fins.filter(s => s.allBought).length)}
-    ${kpi('빠진 권 있는 시리즈', L.filter(s => s.gaps.length).length)}</div></div>
+    ${kpi('산 책', items.length)}${kpi('시리즈', L.length)}${kpi('완결 시리즈', fins.length)}${kpi('완결까지 다 산 시리즈', fins.filter(s => s.allBought).length)}${kpi('빠진 권 있는 시리즈', L.filter(s => s.gaps.length).length)}</div></div>
   <div class="stbox"><h2>${t('읽은 양')}</h2><div class="kpis cmkpis">
     ${kpi('읽은 권', readVols)}${kpi('읽는 중인 시리즈', reading.length)}${kpi('아직 안 읽은 시리즈', unread.length)}${kpi('완결까지 다 읽은 시리즈', fins.filter(s => s.allRead).length)}</div></div>`;
-  h += bars('종류', tally(L, s => s.kind === 'l' ? t('라이트노벨') : t('만화')), true);
-  h += bars('산 해', byYear, true);
-  h += bars('출판사', tally(items, it => it.pub), CMS.open?.['출판사']);
-  h += bars('지은이·그림·원작', role(/지은이|글|그림|원작|만화|작화|저자|일러스트|각색|캐릭터/), CMS.open?.['지은이·그림·원작']);
-  h += bars('옮긴이', role(/옮긴이|번역|역자/), CMS.open?.['옮긴이']);
+  h += one('산 해', group(per(it => (it.buy || '').slice(0, 4) || t('미상'))).sort((a, b) => String(b[0]).localeCompare(String(a[0]))));
+  h += one('출판사', byN(group(per(it => it.pub || t('출판사 미상')))));
+  const ppl = rx => byN(group(L.flatMap(s => s.items.flatMap(it => [...new Set((it.ppl || []).filter(p => rx.test(p.r)).map(p => p.n))].map(n => [n, s, 1])))));
+  h += one('지은이·그림·원작', ppl(/지은이|글|그림|원작|만화|작화|저자|일러스트|각색|캐릭터/));
+  h += one('옮긴이', ppl(/옮긴이|번역|역자/));
+  const noPpl = items.filter(it => !(it.ppl || []).length).length;
   if (noPpl) h += `<p class="setnote">${esc(F('noPeople', noPpl))}</p>`;
   box.innerHTML = h;
-  box.querySelectorAll('[data-cmsf]').forEach(b => b.onclick = () => { CMS.fmt = b.dataset.cmsf; store.set('cmFmt', CMS.fmt); cmStats(); });
-  box.querySelectorAll('[data-cms]').forEach(b => b.onclick = () => { (CMS.open ||= {})[b.dataset.cms] = !CMS.open[b.dataset.cms]; cmStats(); });
+  box.onclick = e => {
+    const sc = e.target.closest('[data-csc]');
+    if (sc) { const k = sc.dataset.csc; CSCOPE[k] = !CSCOPE[k]; if (!CCAT.some(([c]) => CSCOPE[c])) CSCOPE[k] = true; store.set('cmScope', CSCOPE); return cmStats(); }      // 하나는 남김
+    const mo = e.target.closest('[data-cmmore]'); if (mo) { (CMS.open ||= {})[mo.dataset.cmmore] = !CMS.open[mo.dataset.cmmore]; return cmStats(); }
+    const op = e.target.closest('[data-cmopen]'); if (op) return cmOpen(op.dataset.cmopen);
+    const tg = e.target.closest('[data-tog]'); if (tg) { const x = box.querySelector(`[data-list="${tg.dataset.tog}"]`); if (x) x.hidden = !x.hidden; }
+  };
 }

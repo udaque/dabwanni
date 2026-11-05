@@ -317,7 +317,7 @@ function setMode(mode, tab){
   S.mode = mode; store.set('mode', mode);
   document.querySelectorAll('.tabs button[data-tab]').forEach(b => { if (ANIME_TABS.includes(b.dataset.tab)) b.hidden = mode === 'comic'; if (COMIC_TABS.includes(b.dataset.tab)) b.hidden = mode !== 'comic'; });
   $('#modeBtn').textContent = t(mode === 'comic' ? '애니' : '만화책');
-  $('#q').placeholder = t(mode === 'comic' ? '만화책 검색' : '작품·인물·제작사 검색');
+  $('#q').placeholder = t(mode === 'comic' ? '만화책·작가·출판사 검색' : '작품·인물·제작사 검색');
   S.tab = tab || (mode === 'comic' ? store.get('cmTab', 'cbuy') : 'season'); S.shown = PAGE;
   document.querySelectorAll('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === S.tab));
   if (typeof closeSheet === 'function' && !$('#sheet').hidden) closeSheet();
