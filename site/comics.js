@@ -202,14 +202,14 @@ function renderBuy(q){
   const counts = {all: L.length, c: L.filter(s => s.kind !== 'l').length, l: L.filter(s => s.kind === 'l').length};
   if (CMS.kind !== 'all') L = L.filter(s => (CMS.kind === 'l') === (s.kind === 'l'));
   if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub + s.ppl.map(p => p.n).join('')).includes(nq)); }      // 시리즈·출판사·작가 이름으로
-  const gapN = L.filter(s => s.gaps.length).length;
+  const gapN = L.filter(s => s.gaps.length).length, finN = L.filter(s => s.fin).length;
   L.sort(CMS.sort === 'date' ? (a, b) => b.date.localeCompare(a.date) || tcmpS(a, b) : tcmpS);
   let h = guideHTML('cbuy') + (CMS.fmt === 'e' ? ridiGuideHTML() : '');
   if (!Object.keys(CM.items).length) return h + `<div class="stbox"><p class="stempty">${t('아직 가져온 구매내역이 없습니다.')}</p></div>`;
   h += `<div class="seg cmfmt">${[['p', '종이책'], ['e', '이북']].map(([v, l]) => `<button data-cm="fmt" data-v="${v}" class="${CMS.fmt === v ? 'on' : ''}">${t(l)}<span class="pill">${fmtN(fc[v])}</span></button>`).join('')}</div>
   <div class="cmctl">
     <div class="frow"><span class="flab">${t('종류')}</span><div class="fscroll">${[['all', '전체'], ['c', '만화'], ['l', '라이트노벨']].map(([v, l]) => `<button class="chip ${CMS.kind === v ? 'on' : ''}" data-cm="kind" data-v="${v}">${t(l)}<span class="pill">${fmtN(counts[v])}</span></button>`).join('')}</div></div>
-    ${chipRow('보기', 'view', CMS.view, [['all', '전체'], ['pub', '출판사별'], ['gap', '빠진 권 있음', gapN]])}
+    ${chipRow('보기', 'view', CMS.view, [['all', '전체'], ['pub', '출판사별'], ['gap', '빠진 권 있음', gapN], ['fin', '완결', finN]])}
     ${chipRow('정렬', 'sort', CMS.sort, [['name', '이름순'], ['date', '발매일순']])}</div>`;
   if (CMS.view === 'gap') {
     const G = L.filter(s => s.gaps.length); CMQ = [];
@@ -219,10 +219,11 @@ function renderBuy(q){
   }
   // 그릴 순서(머리 줄·카드)만 만들어 두고, 실제 그리기는 스크롤에 맞춰 조금씩 (전부 보여 줌)
   CMQ = [];
+  if (CMS.view === 'fin') L = L.filter(s => s.fin);      // 완결 표시된 시리즈만 (카드로)
   if (CMS.view === 'pub') {
     const G = new Map(); for (const s of L) { const p = s.pub || t('출판사 미상'); if (!G.has(p)) G.set(p, []); G.get(p).push(s); }
     for (const [p, arr] of [...G].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ko'))) { CMQ.push({h: `<h2 class="gh">${esc(p)}<span class="pill">${fmtN(arr.length)}</span></h2>`}); arr.forEach(s => CMQ.push({s})); }
-  } else { CMQ.push({h: `<h2 class="gh">${t('시리즈')}<span class="pill">${fmtN(L.length)}</span></h2>`}); L.forEach(s => CMQ.push({s})); }
+  } else { CMQ.push({h: `<h2 class="gh">${t(CMS.view === 'fin' ? '완결' : '시리즈')}<span class="pill">${fmtN(L.length)}</span></h2>`}); L.forEach(s => CMQ.push({s})); }
   return h + '<div id="cmFeed"></div><div id="cmMore" class="cmmore"></div>';
 }
 let CMQ = [], CMQi = 0, CMQobs = null;
@@ -258,6 +259,8 @@ function renderCart(){
 function cmRender(tab){
   const box = $('#comics');
   box.innerHTML = tab === 'ccart' ? renderCart() : renderBuy(S.q);
+  // 골라 둔 칩이 줄 오른쪽 밖에 있으면 보이게 줄을 밀어 둠 (「완결」 등)
+  box.querySelectorAll('.fscroll').forEach(r => { const on = r.querySelector('.chip.on'); if (on && on.offsetLeft + on.offsetWidth > r.clientWidth) r.scrollLeft = on.offsetLeft + on.offsetWidth - r.clientWidth + 16; });
   if (CMQobs) { CMQobs.disconnect(); CMQobs = null; }
   if (tab !== 'ccart' && $('#cmFeed')) {
     CMQi = 0; cmAppend(48);
