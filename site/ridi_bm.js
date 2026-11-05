@@ -72,7 +72,7 @@
     msg('보내는 중… (' + items.length + '권)');
     var timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg('전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'); } }, 500);
     window.addEventListener('message', function onAck(e) {
-      if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;
+      if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;      // 다봤니가 받았다는 답
       clearInterval(timer); window.removeEventListener('message', onAck);
       msg('보냈습니다. 새로 들어간 책 ' + e.data.added + '권.'); clearBtns(); btn('닫기', false, close);
     });
