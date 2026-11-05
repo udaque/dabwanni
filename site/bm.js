@@ -334,7 +334,7 @@
   function send(final) {
     var items = picked().map(function (x) { return { id: x.id, t: x.t, cover: x.cover, pub: x.pub, buy: x.buy, date: x.date, eb: x.eb, kind: x.kind, price: x.price, sec: x.sec, g: x.g, f: x.f, sid: x.sid, cats: x.cats, raw: x.raw, ppl: x.ppl }; });
     if (!items.length) { msg.textContent = '아직 보낼 만화·라이트노벨이 없습니다.'; return; }
-    var w = window.open(DW + '/#comics-import', 'dabwanni'), payload;
+    var payload;
     if (mode === 'cart') {
       var secs = [], idx = {};
       items.forEach(function (x) { var n = x.sec || '기타'; if (!(n in idx)) { idx[n] = secs.length; secs.push({ name: n, items: [] }); } secs[idx[n]].items.push(x); });
@@ -344,15 +344,33 @@
         .map(function (x) { return { id: x.id, t: x.t, buy: x.buy, cover: x.cover, snip: (cache[x.id] && cache[x.id].snip) || '' }; });
       payload = { type: 'dabwanni-aladin', kind: 'purchase', items: items, fails: failList };
     }
-    var keep = msg.textContent; msg.textContent = '보내는 중… (' + items.length + '권)';
-    var tries = 0, timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg.textContent = '전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'; } }, 500);
-    window.addEventListener('message', function onAck(e) {
-      if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;
-      clearInterval(timer); window.removeEventListener('message', onAck);
+    msg.textContent = '보내는 중… (' + items.length + '권)';
+    deliver(payload, function (data) {
+      var e = { data: data };
       var note = mode === 'cart' ? '장바구니 ' + e.data.added + '권을 백업했습니다.' : '새로 들어간 책 ' + e.data.added + '권.';
       if (working) { msg.textContent = '보냈습니다. ' + note + ' 계속 확인하는 중입니다.'; workingButtons(); }
       else { msg.textContent = '보냈습니다. ' + note; finish(); }
     });
+  }
+  // 다봤니로 전달: 누를 때마다 다봤니를 새 창으로 열고(이전 창이 닫혔어도 문제없게), 받았다는 답이 올 때까지 보냄.
+  // 다봤니 창이 도중에 닫히면 알아채고 다시 누르라고 알림
+  var SEND = {};
+  function deliver(payload, onDone) {
+    if (SEND.timer) clearInterval(SEND.timer); if (SEND.ack) window.removeEventListener('message', SEND.ack);
+    var w = window.open(DW + '/#comics-import', 'dabwanni' + Date.now()), tries = 0;
+    if (!w) { msg.textContent = '다봤니 창을 열지 못했습니다. 팝업 차단을 끄고 다시 눌러 주세요.'; return; }
+    try { w.focus(); } catch (e) {}
+    SEND.timer = setInterval(function () {
+      tries++;
+      if (w.closed) { clearInterval(SEND.timer); window.removeEventListener('message', SEND.ack); msg.textContent = '다봤니 창이 닫혀 전달하지 못했습니다. 「다봤니로 보내기」를 다시 눌러 주세요.'; return; }
+      try { w.postMessage(payload, DW); } catch (e) {}
+      if (tries > 240) { clearInterval(SEND.timer); msg.textContent = '전달하지 못했습니다. 「다봤니로 보내기」를 다시 눌러 주세요.'; }
+    }, 500);
+    SEND.ack = function (e) {
+      if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;
+      clearInterval(SEND.timer); window.removeEventListener('message', SEND.ack); onDone(e.data);
+    };
+    window.addEventListener('message', SEND.ack);
   }
   msg.textContent = mode === 'cart' ? '이 장바구니의 만화·라이트노벨을 다봤니에 백업합니다.' : '구매내역의 만화·라이트노벨을 모두 읽어 다봤니로 가져옵니다. 쪽이 많으면 몇 분 걸릴 수 있습니다.';
   var cRow = null, startMsg = msg.textContent; msg.textContent = '준비하는 중…';

@@ -431,3 +431,5 @@ html{touch-action:manipulation}
 .dot.pc,.hbars .bar i.pc{background:var(--onair)}.dot.pl,.hbars .bar i.pl{background:var(--watching)}
 .dot.ec,.hbars .bar i.ec{background:var(--want)}.dot.el,.hbars .bar i.el{background:#8B6CF0}
 .pill.src.aladin{background:#E85A5A22;color:#E85A5A}.pill.src.ridi{background:#1F8CE622;color:#1F8CE6}
+.imbar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:9999;padding:14px 16px;border-radius:14px;background:var(--onair);color:#fff;font-size:15px;font-weight:700;line-height:1.45;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.imbar.done{background:var(--want)}

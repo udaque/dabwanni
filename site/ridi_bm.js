@@ -67,16 +67,26 @@
     msg('리디 구매 ' + ids.length + '권 중 만화·라이트노벨 ' + items.length + '권을 찾았습니다.' + (skipped ? ' (만화가 아닌 책 ' + skipped + '권 제외)' : ''));
     clearBtns(); if (items.length) btn('다봤니로 보내기', true, send); btn('닫기', false, close);
   }
+  // 다봤니로 전달: 누를 때마다 새 창으로 열고, 답이 올 때까지 보냄. 창이 닫히면 알아채고 다시 누르라고 알림
+  var SEND = {};
   function send() {
-    var w = window.open(DW + '/#comics-import', 'dabwanni'), payload = { type: 'dabwanni-ridi', items: items }, tries = 0;
-    try { w && w.focus(); } catch (e) {}
+    if (SEND.timer) clearInterval(SEND.timer); if (SEND.ack) window.removeEventListener('message', SEND.ack);
+    var w = window.open(DW + '/#comics-import', 'dabwanni' + Date.now()), payload = { type: 'dabwanni-ridi', items: items }, tries = 0;
+    if (!w) { msg('다봤니 창을 열지 못했습니다. 팝업 차단을 끄고 다시 눌러 주세요.'); return; }
+    try { w.focus(); } catch (e) {}
     msg('보내는 중… (' + items.length + '권)');
-    var timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg('전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'); } }, 500);
-    window.addEventListener('message', function onAck(e) {
+    SEND.timer = setInterval(function () {
+      tries++;
+      if (w.closed) { clearInterval(SEND.timer); window.removeEventListener('message', SEND.ack); msg('다봤니 창이 닫혀 전달하지 못했습니다. 「다봤니로 보내기」를 다시 눌러 주세요.'); return; }
+      try { w.postMessage(payload, DW); } catch (e) {}
+      if (tries > 240) { clearInterval(SEND.timer); msg('전달하지 못했습니다. 「다봤니로 보내기」를 다시 눌러 주세요.'); }
+    }, 500);
+    SEND.ack = function (e) {
       if (e.origin !== DW || !e.data || e.data.type !== 'dabwanni-aladin-ack') return;      // 다봤니가 받았다는 답
-      clearInterval(timer); window.removeEventListener('message', onAck);
+      clearInterval(SEND.timer); window.removeEventListener('message', SEND.ack);
       msg('보냈습니다. 새로 들어간 책 ' + e.data.added + '권.'); clearBtns(); btn('닫기', false, close);
-    });
+    };
+    window.addEventListener('message', SEND.ack);
   }
   msg('리디에서 산 만화·라이트노벨을 다봤니로 가져옵니다.');
   btn('시작', true, function () { run().catch(function (e) { msg(e.message === 'login' ? '리디에 로그인한 상태로 내 서재에서 다시 눌러 주세요.' : '읽는 중 문제가 생겼습니다: ' + e.message + ' — 이 화면을 캡처해 주세요.'); clearBtns(); btn('닫기', false, close); }); });

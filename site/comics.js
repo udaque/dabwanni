@@ -498,3 +498,15 @@ function cmStats(){
     const tg = e.target.closest('[data-tog]'); if (tg) { const x = box.querySelector(`[data-list="${tg.dataset.tog}"]`); if (x) x.hidden = !x.hidden; }
   };
 }
+
+/* 북마크가 다봤니를 새 창으로 열었을 때(#comics-import): 받을 때까지 창을 닫지 말라는 안내, 받으면 결과 */
+(function () {
+  if (location.hash !== '#comics-import') return;
+  const bar = document.createElement('div'); bar.className = 'imbar';
+  bar.textContent = t('알라딘·리디에서 보내는 자료를 받는 중입니다. 다 받을 때까지 이 창을 닫지 마세요.');
+  document.body.appendChild(bar);
+  window.addEventListener('message', e => {
+    if (!['https://www.aladin.co.kr', 'https://m.aladin.co.kr', 'https://ridibooks.com', 'https://library.ridibooks.com'].includes(e.origin) || !e.data || !/^dabwanni-(aladin|ridi)$/.test(e.data.type)) return;
+    setTimeout(() => { bar.classList.add('done'); bar.textContent = t('받았습니다. 이제 이 창을 써도 됩니다.'); history.replaceState(null, '', location.pathname); setTimeout(() => bar.remove(), 4000); }, 300);
+  });
+})();
