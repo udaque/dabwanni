@@ -69,6 +69,7 @@
   }
   function send() {
     var w = window.open(DW + '/#comics-import', 'dabwanni'), payload = { type: 'dabwanni-ridi', items: items }, tries = 0;
+    try { w && w.focus(); } catch (e) {}
     msg('보내는 중… (' + items.length + '권)');
     var timer = setInterval(function () { tries++; try { w && w.postMessage(payload, DW); } catch (e) {} if (tries > 60) { clearInterval(timer); msg('전달하지 못했습니다. 다봤니 창이 열렸는지 확인한 뒤 다시 눌러 주세요.'); } }, 500);
     window.addEventListener('message', function onAck(e) {

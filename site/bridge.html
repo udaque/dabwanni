@@ -6,7 +6,8 @@
 var CODE = { 'https://ridibooks.com': '/ridi_bm.min.js', 'https://library.ridibooks.com': '/ridi_bm.min.js' };
 addEventListener('message', function (e) {
   if (!e.data || e.data.type !== 'dw-hello' || !/^https:\/\//.test(e.origin)) return;
-  var src = CODE[e.origin], done = function (code) { e.source.postMessage({ type: 'dw-code', code: code }, e.origin); document.getElementById('m').textContent = code ? '연결됐습니다. 원래 화면으로 돌아가 「시작」을 눌러 주세요.' : '이 사이트는 아직 지원하지 않습니다.'; };
+  // 코드를 넘긴 뒤 이 창은 스스로 닫음: 나중에 「다봤니로 보내기」가 이 창을 다시 쓰지 않고 다봤니를 새 탭으로 앞에 띄우게
+  var src = CODE[e.origin], done = function (code) { e.source.postMessage({ type: 'dw-code', code: code }, e.origin); document.getElementById('m').textContent = code ? '연결됐습니다. 원래 화면으로 돌아가 「시작」을 눌러 주세요.' : '이 사이트는 아직 지원하지 않습니다.'; if (code) setTimeout(function () { window.close(); }, 600); };
   if (!src) return done('');
   fetch(src + '?v=' + Date.now()).then(function (r) { return r.text(); }).then(done, function () { done(''); });
 });
