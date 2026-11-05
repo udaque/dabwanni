@@ -161,18 +161,15 @@ function seriesList(){
 }
 
 /* ---------- 화면 ---------- */
-const BM_CODE = `javascript:(()=>{const s=document.createElement('script');s.src='${location.origin}/bm.js?v='+Date.now();document.body.appendChild(s)})()`;
-// 리디 북마크: 리디 화면은 외부 코드를 불러올 수 없어서(보안 정책), 짧은 북마크가 다봤니 연결 창(ridi.html)을 열고
-// 거기서 가져오기 코드(ridi_bm.min.js)를 받아 실행함. (원문: ridi_loader.js)
-const RIDI_CODE = 'javascript:' + encodeURIComponent('!function(){if(window.__dwRidiL){var e=document.getElementById("dwrl");e&&e.remove()}window.__dwRidiL=1,window.__dwRidi=0;var t="https://dabwanni.pages.dev",d=document.createElement("div");d.id="dwrl",d.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#1B2130;color:#E7ECF3;border-radius:16px;padding:16px;font:15px/1.5 -apple-system,sans-serif",d.textContent="다봤니 연결 중… 새 창이 열리면 이 화면으로 돌아와 주세요.",document.body.appendChild(d);var n,i=window.open(t+"/ridi.html","dabwanni"),o=0;addEventListener("message",function e(i){if(i.origin===t&&i.data&&"dw-ridi-code"===i.data.type){removeEventListener("message",e),clearInterval(n),d.remove();var o=document.createElement("script");o.textContent=i.data.code,document.body.appendChild(o)}}),n=setInterval(function(){o++;try{i&&i.postMessage({type:"dw-ridi-hello"},t)}catch(e){}o>100&&(clearInterval(n),d.textContent="다봤니 창과 연결하지 못했습니다. 팝업 차단을 끄고 다시 눌러 주세요.")},300)}();');
+// 다봤니 북마크(하나로 모든 사이트): 원문 bm_loader.js
+const BM_CODE = 'javascript:' + encodeURIComponent('!function(){var e="https://dabwanni.pages.dev",t=document.createElement("script");t.src=e+"/bm.js?v="+Date.now(),t.onerror=function(){var t=document.getElementById("dwrl");t&&t.remove();var n=document.createElement("div");n.id="dwrl",n.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#1B2130;color:#E7ECF3;border-radius:16px;padding:16px;font:15px/1.5 -apple-system,sans-serif",n.textContent="다봤니 연결 중… 새 창이 열리면 이 화면으로 돌아와 주세요.",document.body.appendChild(n);var d,a=window.open(e+"/bridge","dabwanni"),o=0;addEventListener("message",function t(a){if(a.origin===e&&a.data&&"dw-code"===a.data.type)if(removeEventListener("message",t),clearInterval(d),n.remove(),a.data.code){window.__dwRidi=0;var o=document.createElement("script");o.textContent=a.data.code,document.body.appendChild(o)}else alert("다봤니: 이 사이트는 아직 지원하지 않습니다.")}),d=setInterval(function(){o++;try{a&&a.postMessage({type:"dw-hello"},e)}catch(e){}o>100&&(clearInterval(d),n.textContent="다봤니 창과 연결하지 못했습니다. 팝업 차단을 끄고 다시 눌러 주세요.")},300)},document.body.appendChild(t)}();');
 const RIDI_URL = 'https://ridibooks.com/library';
 function ridiGuideHTML(){
   return `<div class="stbox cmguide"><button class="cmgh" data-cm="rguide" aria-expanded="${!!CMS.rguide}"><b>${t('리디 구매내역 가져오기')}</b><span class="car">${CMS.rguide ? '▴' : '▾'}</span></button>
     <div ${CMS.rguide ? '' : 'hidden'}><ol class="cmsteps">
-      <li>${t('아래 「다봤니 리디 북마크」를 북마크로 저장합니다. 사파리에서는 아무 페이지나 북마크한 뒤, 북마크 편집에서 주소를 복사한 코드로 바꿉니다.')}</li>
       <li>${t('리디에 로그인한 상태로 내 서재를 엽니다.')} <a href="${RIDI_URL}" target="_blank" rel="noopener">${esc(RIDI_URL.replace('https://', ''))}</a></li>
-      <li>${t('그 페이지에서 저장한 북마크를 누르고, 다 읽으면 「다봤니로 보내기」를 누릅니다.')}</li></ol>
-      ${1 ? `<div class="setbtns"><a class="bmlink" href="${esc(RIDI_CODE)}" data-cm="bmnop">${t('다봤니 리디 북마크')}</a><button data-cm="rcopy">${t('코드 복사')}</button></div>` : `<p class="setnote">${t('불러오는 중')}</p>`}</div></div>`;
+      <li>${t('알라딘과 같은 「다봤니 북마크」를 누르고, 새 창이 열리면 리디 화면으로 돌아와 「시작」, 다 읽으면 「다봤니로 보내기」를 누릅니다.')}</li></ol>
+      </div></div>`;
 }
 function guideHTML(tab){
   const url = tab === 'ccart' ? CART_URL : BUY_URL;
@@ -313,7 +310,6 @@ document.addEventListener('click', e => {
   if (a === 'open') return cmOpen(k);
   if (a === 'guide') { CMS.guide = !CMS.guide; return cmRender(S.tab); }
   if (a === 'rguide') { CMS.rguide = !CMS.rguide; return cmRender(S.tab); }
-  if (a === 'rcopy') { navigator.clipboard?.writeText(RIDI_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
   if (a === 'bmcopy') { navigator.clipboard?.writeText(BM_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
   if (a === 'kind' || a === 'view' || a === 'sort' || a === 'fmt') { CMS[a] = el.dataset.v; store.set('cm' + a[0].toUpperCase() + a.slice(1), CMS[a]); return cmRender(S.tab); }
   if (a === 'snap') { CMS.cart = +el.dataset.v; return cmRender(S.tab); }
