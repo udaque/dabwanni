@@ -430,3 +430,4 @@ html{touch-action:manipulation}
 /* 만화책 기록: 종이책 만화·종이책 라이트노벨·이북 만화·이북 라이트노벨 */
 .dot.pc,.hbars .bar i.pc{background:var(--onair)}.dot.pl,.hbars .bar i.pl{background:var(--watching)}
 .dot.ec,.hbars .bar i.ec{background:var(--want)}.dot.el,.hbars .bar i.el{background:#8B6CF0}
+.pill.src.aladin{background:#E85A5A22;color:#E85A5A}.pill.src.ridi{background:#1F8CE622;color:#1F8CE6}

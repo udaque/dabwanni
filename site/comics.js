@@ -38,7 +38,8 @@ function parseTitle(t){
   // 닫히지 않은 끝 괄호(알라딘이 긴 제목을 잘라 보낸 경우)
   let um = c.match(/\s*\(([^()]*)$/);
   if (um) { if (ED_WORDS.test(um[1])) ed = ed || um[1].trim().replace(/\s.*$/, ''); c = c.slice(0, um.index).trim(); }
-  c = c.replace(/\s*\(?완결\)?\s*$/, '').trim();                        // 「… 10 (완결)」
+  c = c.replace(/\s*\(?완결\)?\s*$/, '').trim();
+  c = c.replace(/\s+(?:프롤로그|에필로그)$/, '').trim();      // 웹툰 「… 프롤로그」                        // 「… 10 (완결)」
   // 권 번호 뒤 「 : 부제」 (「… 21 : ASAKURA DIYS」, 「Vol.1 : 집으로」)
   um = c.match(/^(.*\S)\s+((?:vol\.?\s*)?\d{1,3})\s*권?\s*[:：]\s+\S.*$/i);
   if (um) c = `${um[1]} ${um[2]}`;
@@ -66,7 +67,7 @@ function parseTitle(t){
     vols = []; for (let v = +rg[2]; v <= +rg[3]; v++) vols.push(v);
     base = rg[1].trim(); vol = +rg[3];
   } else if (!vols) {
-    let m = c.match(/^(.*?\S)\s*(?:Season|시즌|vol\.?|volume)\s*(\d{1,3})$/i) || c.match(/^(.*?)\s*(?:제\s*)?(\d{1,3})\s*권$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
+    let m = c.match(/^(.*?\S)\s*(?:Season|시즌|vol\.?|volume)\s*(\d{1,3})$/i) || c.match(/^(.*?)\s*(?:제\s*)?(\d{1,4})\s*[권화]$/) || c.match(/^(.*?)[\s.(]\s*(\d{1,3})\s*\)?$/) || c.match(/^(.*\D)(\d{1,3})$/);
     if (m && m[1].trim()) { base = m[1].trim(); vol = +m[2]; }
     else { m = c.match(/^(.*\S)\s(\S+)$/); if (m && korNum(m[2])) { base = m[1]; vol = korNum(m[2]); } }
   } else vol = vols[vols.length - 1];
@@ -127,6 +128,7 @@ function seriesList(){
     const k = rep.get(find(seriesKey(it))); let s = S_.get(k);
     if (!s) S_.set(k, s = {key: k, name: '', pub: it.pub || '', fmt: fmtOf(it), kind: kindOf(it), items: [], vols: new Set(), eb: false, date: '', buy: ''});
     const pt = parseTitle(it.t); it.vol = pt.vol; it.vols = pt.vols; it.ed = pt.ed;
+    if (!it.vols.length && it.rvol > 0) { it.vol = it.rvol; it.vols = [it.rvol]; }      // 리디가 알려 준 권 번호
     s.items.push(it); it.vols.forEach(v => s.vols.add(v)); if (it.eb) s.eb = true;
     if ((it.date || '') > s.date) s.date = it.date || ''; if ((it.buy || '') > s.buy) s.buy = it.buy || '';
     if (!s.name && seriesKey(it) === k) s.name = baseOf(it.t);
@@ -148,7 +150,8 @@ function seriesList(){
     const last = s.items[s.items.length - 1]; s.cover = last.cover; s.pub = last.pub || s.pub;
     const st = CM.series[s.key] || {}; s.read = st.read || 0; s.ack = st.ack === s.gaps.join(',');
     // 완결: 직접 표시한 마지막 권, 없으면 제목의 「완결」·「(총N권/완결)」에서 읽은 값
-    let auto = 0; s.items.forEach(it => { if (/완결/.test(it.orig || it.t || '') && !/미완결/.test(it.orig || it.t || '')) auto = Math.max(auto, (it.vols || []).slice(-1)[0] || 0); });
+    let auto = 0; s.items.forEach(it => { if (/완결/.test(it.orig || it.t || '') && !/미완결/.test(it.orig || it.t || '')) auto = Math.max(auto, (it.vols || []).slice(-1)[0] || 0); if (it.rfin) auto = Math.max(auto, it.rfin); });
+    s.srcs = [...new Set(s.items.map(it => it.src === 'ridi' ? 'ridi' : it.man ? '' : 'aladin').filter(Boolean))];      // 어디서 샀는지
     s.fin = st.fin === 0 ? 0 : (st.fin || auto || 0); s.finAuto = !st.fin && !!auto;
     s.allBought = !!s.fin && s.max >= s.fin && !s.gaps.some(v => v <= s.fin);
     s.allRead = !!s.fin && s.read >= s.fin;
@@ -159,6 +162,18 @@ function seriesList(){
 
 /* ---------- 화면 ---------- */
 const BM_CODE = `javascript:(()=>{const s=document.createElement('script');s.src='${location.origin}/bm.js?v='+Date.now();document.body.appendChild(s)})()`;
+// 리디 북마크: 리디 화면은 외부 스크립트를 막아서 코드 전체를 북마크에 넣음 (ridi_bm.min.js를 읽어 만듦)
+let RIDI_CODE = '';
+fetch('/ridi_bm.min.js?v=' + Date.now()).then(r => r.ok ? r.text() : '').then(s => { if (s) { RIDI_CODE = 'javascript:' + encodeURIComponent(s.trim()); if (S.mode === 'comic' && S.tab === 'cbuy' && CMS.fmt === 'e') cmRender(S.tab); } }).catch(() => {});
+const RIDI_URL = 'https://ridibooks.com/library';
+function ridiGuideHTML(){
+  return `<div class="stbox cmguide"><button class="cmgh" data-cm="rguide" aria-expanded="${!!CMS.rguide}"><b>${t('리디 구매내역 가져오기')}</b><span class="car">${CMS.rguide ? '▴' : '▾'}</span></button>
+    <div ${CMS.rguide ? '' : 'hidden'}><ol class="cmsteps">
+      <li>${t('아래 「다봤니 리디 북마크」를 북마크로 저장합니다. 사파리에서는 아무 페이지나 북마크한 뒤, 북마크 편집에서 주소를 복사한 코드로 바꿉니다.')}</li>
+      <li>${t('리디에 로그인한 상태로 내 서재를 엽니다.')} <a href="${RIDI_URL}" target="_blank" rel="noopener">${esc(RIDI_URL.replace('https://', ''))}</a></li>
+      <li>${t('그 페이지에서 저장한 북마크를 누르고, 다 읽으면 「다봤니로 보내기」를 누릅니다.')}</li></ol>
+      ${RIDI_CODE ? `<div class="setbtns"><a class="bmlink" href="${esc(RIDI_CODE)}" data-cm="bmnop">${t('다봤니 리디 북마크')}</a><button data-cm="rcopy">${t('코드 복사')}</button></div>` : `<p class="setnote">${t('불러오는 중')}</p>`}</div></div>`;
+}
 function guideHTML(tab){
   const url = tab === 'ccart' ? CART_URL : BUY_URL;
   return `<div class="stbox cmguide"><button class="cmgh" data-cm="guide" aria-expanded="${CMS.guide}"><b>${t(tab === 'ccart' ? '알라딘 장바구니 백업하기' : '알라딘 구매내역 가져오기')}</b><span class="car">${CMS.guide ? '▴' : '▾'}</span></button>
@@ -174,7 +189,7 @@ function seriesCard(s){
   return `<div class="card cmcard">
     <button class="kv" data-cm="open" data-k="${esc(s.key)}" aria-label="${esc(s.name)}"><span class="nokv">${t('표지 없음')}</span>${s.cover ? `<img src="${esc(s.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${s.eb ? '<span class="ebtag">e-book</span>' : ''}</button>
     <div class="meta"><div class="t1" data-cm="open" data-k="${esc(s.key)}">${esc(s.name)}</div><div class="t2">${esc(s.pub)}</div>
-      <div class="pills">${kindPill(s.kind)}<span class="pill">${esc(F('ownedTo', s.max || s.items.length))}</span>${s.fin ? `<span class="pill fin">${esc(F('finN', s.fin))}</span>` : ''}</div>${warn}</div>
+      <div class="pills">${kindPill(s.kind)}<span class="pill">${esc(F('ownedTo', s.max || s.items.length))}</span>${s.fmt === 'e' ? s.srcs.map(x => `<span class="pill src ${x}">${t(x === 'ridi' ? '리디' : '알라딘')}</span>`).join('') : ''}${s.fin ? `<span class="pill fin">${esc(F('finN', s.fin))}</span>` : ''}</div>${warn}</div>
     <div class="prog"><button class="step" data-cm="read-" data-k="${esc(s.key)}" aria-label="${t('읽은 권 빼기')}">−</button>
       <span class="now">${s.read}<small> / ${esc(F('volN', s.max || s.items.length))}</small></span>
       <button class="step" data-cm="read+" data-k="${esc(s.key)}" aria-label="${t('읽은 권 더하기')}">+</button></div></div>`;
@@ -192,7 +207,7 @@ function renderBuy(q){
   if (q) { const nq = norm(q); L = L.filter(s => norm(s.name + s.pub + s.ppl.map(p => p.n).join('')).includes(nq)); }      // 시리즈·출판사·작가 이름으로
   const gapN = L.filter(s => s.gaps.length).length;
   L.sort(CMS.sort === 'date' ? (a, b) => b.date.localeCompare(a.date) || tcmpS(a, b) : tcmpS);
-  let h = guideHTML('cbuy');
+  let h = guideHTML('cbuy') + (CMS.fmt === 'e' ? ridiGuideHTML() : '');
   if (!Object.keys(CM.items).length) return h + `<div class="stbox"><p class="stempty">${t('아직 가져온 구매내역이 없습니다.')}</p></div>`;
   h += `<div class="seg cmfmt">${[['p', '종이책'], ['e', '이북']].map(([v, l]) => `<button data-cm="fmt" data-v="${v}" class="${CMS.fmt === v ? 'on' : ''}">${t(l)}<span class="pill">${fmtN(fc[v])}</span></button>`).join('')}</div>
   <div class="cmctl">
@@ -273,7 +288,7 @@ function cmOpen(key){
     ${s.ext.length ? `<div class="cmext"><span class="setnote">${t('다른 곳에서 삼')}</span><div class="pills">${s.ext.map(v => `<button class="chip ext" data-cmx="del" data-v="${v}">${esc(F('volN', v))} ✕</button>`).join('')}</div></div>` : ''}
     <div class="rows">${s.items.map(it => `<a class="cmrowi" href="https://www.aladin.co.kr/m/mproduct.aspx?ItemId=${esc(it.id)}" target="_blank" rel="noopener">
       <span class="cover">${it.cover ? `<img src="${esc(it.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}${it.eb ? '<span class="ebtag">e-book</span>' : ''}</span>
-      <span class="grow"><b>${esc(it.vols && it.vols.length > 1 ? F('volN', `${it.vols[0]}~${it.vols[it.vols.length - 1]}`) : it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([okDate(it.date) && F('pubOn', it.date), okDate(it.buy) && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
+      <span class="grow"><b>${esc(it.vols && it.vols.length > 1 ? F('volN', `${it.vols[0]}~${it.vols[it.vols.length - 1]}`) : it.vol ? F('volN', it.vol) : t('권수 미상'))}${it.ed ? ` <span class="pill edtag">${esc(it.ed)}</span>` : ''}${s.fmt === 'e' && !it.man ? ` <span class="pill edtag src ${it.src === 'ridi' ? 'ridi' : 'aladin'}">${t(it.src === 'ridi' ? '리디' : '알라딘')}</span>` : ''}${it.vol && s.read >= it.vol ? ` <i class="ck">✓</i>` : ''}</b><span class="s">${esc(it.t)}</span><span class="s">${esc([okDate(it.date) && F('pubOn', it.date), okDate(it.buy) && F('boughtOn', it.buy)].filter(Boolean).join(' · '))}</span></span></a>`).join('')}</div>
     <div class="ebtns"><button class="ecancel">${t('닫기')}</button></div></div>`;
   document.body.appendChild(box);
   box.querySelector('.ecancel').onclick = () => box.remove();
@@ -297,6 +312,8 @@ document.addEventListener('click', e => {
   e.stopPropagation();
   if (a === 'open') return cmOpen(k);
   if (a === 'guide') { CMS.guide = !CMS.guide; return cmRender(S.tab); }
+  if (a === 'rguide') { CMS.rguide = !CMS.rguide; return cmRender(S.tab); }
+  if (a === 'rcopy') { navigator.clipboard?.writeText(RIDI_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
   if (a === 'bmcopy') { navigator.clipboard?.writeText(BM_CODE).then(() => { el.textContent = t('복사했습니다'); }, () => {}); return; }
   if (a === 'kind' || a === 'view' || a === 'sort' || a === 'fmt') { CMS[a] = el.dataset.v; store.set('cm' + a[0].toUpperCase() + a.slice(1), CMS[a]); return cmRender(S.tab); }
   if (a === 'snap') { CMS.cart = +el.dataset.v; return cmRender(S.tab); }
@@ -312,6 +329,22 @@ document.addEventListener('click', e => {
 /* ---------- 북마클릿에서 받기 ---------- */
 window.addEventListener('message', e => {
   const d = e.data;
+  // 리디 내 서재에서 보낸 이북 (출처 표시: src ridi)
+  if (e.origin === 'https://ridibooks.com' && d && d.type === 'dabwanni-ridi' && Array.isArray(d.items)) {
+    const now = Date.now(); let added = 0;
+    for (const x of d.items) {
+      const id = String(x.id || ''); if (!/^r\d+$/.test(id)) continue;
+      const it = {id, t: String(x.t || '').slice(0, 300), sub: String(x.sub || '').slice(0, 200), cover: /^https:\/\//.test(x.cover || '') ? x.cover : '', pub: String(x.pub || '').slice(0, 80),
+        date: String(x.date || '').slice(0, 10), buy: String(x.buy || '').slice(0, 10), kind: x.kind === 'l' ? 'l' : 'c', eb: 1, src: 'ridi', rcat: String(x.rcat || '').slice(0, 120),
+        ...(x.sid ? {sid: String(x.sid).slice(0, 24)} : {}), ...(+x.vol >= 0 ? {rvol: +x.vol} : {}), unit: String(x.unit || '').slice(0, 4), ...(+x.rfin > 0 ? {rfin: +x.rfin} : {}),
+        ...(Array.isArray(x.ppl) && x.ppl.length ? {ppl: x.ppl.slice(0, 20).map(p => ({n: String(p.n || '').slice(0, 40), r: String(p.r || '').slice(0, 12)})).filter(p => p.n)} : {}), own: 1, u: now};
+      if (!CM.items[id]) added++;
+      CM.items[id] = {...CM.items[id], ...it};
+    }
+    cmSave(); if (S.mode === 'comic') cmRender(S.tab);
+    try { e.source && e.source.postMessage({type: 'dabwanni-aladin-ack', added}, e.origin); } catch {}
+    return;
+  }
   if (!ALADIN.includes(e.origin) || !d || d.type !== 'dabwanni-aladin' || !Array.isArray(d.items)) return;
   const now = Date.now(); let added = 0;
   const pick = x => ({id: String(x.id), t: String(x.t || '').slice(0, 300), cover: /^https:\/\//.test(x.cover || '') ? x.cover : '', pub: String(x.pub || '').slice(0, 80),
