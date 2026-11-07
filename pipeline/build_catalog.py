@@ -99,10 +99,27 @@ if ALS:
     a=a+new
     print(f'AniList 분기 목록: 기존 {upd}편 시기·상태 갱신, 새 작품 {len(new)}편 추가')
 
+# 나라 정보가 없는 항목(MAL·aniSearch에서만 온 것 등)의 중국 작품: 제목에 일본어(가나)가 하나도 없고,
+# 중국어 간체 전용 글자나 「第二季」식 시즌 표기가 있으면 중국 작품으로 봄 (「爱上她的理由 第二季」)
+_SIMP=re.compile('[爱们这说时为龙门东车马鸟鱼书长开关战么还进让识风飞华专业丝两严丰乐习乡买亲亿仅从仓价优伟传伤侠侣侦侧俩债倾剧剑带师归异记设许论诗话语误请读谁调谈课账货贵费赵转轮软载辈边达迁过运远连迟选递逻遗邮释钟钱铁银锁问间闻阳阴阵陆陈难页顶项顺须顾领频题颜馆驱验骑鲁鲜鸡鸣鸭]')
+_ZHSEA=re.compile(r'第[一二三四五六七八九十0-9]+季')
+def looks_chinese(x):
+    if any('anilist.co' in u for u in x['sources']): return False      # AniList에 있는 작품은 AniList의 제작 국가 정보를 따름
+    names=[x.get('title') or '']+list(x.get('synonyms') or [])
+    if any(kana.search(n) for n in names): return False
+    return any(_SIMP.search(n) or _ZHSEA.search(n) for n in names)
+NOW_Y=__import__('datetime').date.today().year
 out=[];key2i={};dropped=collections.Counter()
 for x in a:
     tags=set(x['tags'])
     if tags&NONJP and not any(CO.search(t) for t in tags): dropped['nonjp']+=1; continue
+    if looks_chinese(x):
+        dropped['nonjp_title']+=1
+        if dropped['nonjp_title'] <= 80: print('중국 작품으로 뺌:', x['title'], '|', next((n for n in x['synonyms'] if cjk.search(n)), ''))
+        continue
+    # 다른 출처 없이 aniSearch에만 있고, 일본어 제목도 없는 미래 작품은 정체를 확인할 수 없어 뺌 (「A Letter to Hanako」 2028)
+    if all('anisearch' in u for u in x['sources']) and not any(kana.search(n) or cjk.search(n) for n in x['synonyms']) and (x['animeSeason'].get('year') or 0) > NOW_Y:
+        dropped['anisearch_unknown_future']+=1; print('정체 불명 미래 작품으로 뺌:', x['title'], x['animeSeason'].get('year')); continue
     s=x['sources']; al=idof(s,'anilist.co'); mal=idof(s,'myanimelist.net'); adb=idof(s,'anidb.net')
     f=fr.get(('al',int(al))) if al else None
     if not f and mal: f=fr.get(('mal',int(mal)))
@@ -377,6 +394,26 @@ for r in merged:
     # 뮤직비디오: 대표 항목이 뮤직비디오이고 스페셜·웹·미분류·뮤직이면 형식을 P로
     if r.get('_mv') and r['ty'] in ('S', 'O', 'X', 'P'): r['ty'] = 'P'
     elif r['ty'] == 'P': r['ty'] = 'S'
+# 직접 정한 값 (overrides.json): 「into」 다른 작품에 합치기, 「y」·「q」 방영 시기, 「drop」 빼기
+try: _OVR={k_: v for k_, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'overrides.json'), encoding='utf-8')).items() if not k_.startswith('_')}
+except Exception: _OVR={}
+_byk={r['k']: r for r in merged}
+for k_, v in _OVR.items():
+    r=_byk.get(k_)
+    if not r: continue
+    if v.get('into') and v['into'] in _byk and v['into'] != k_:
+        t_=_byk[v['into']]; t_.setdefault('_alias', []).extend([k_] + r.get('_alias', []))
+        for f_ in ('ja', 'ko', 'en', 'p', 'adb', 'mal', 'al'):
+            if not t_.get(f_) and r.get(f_): t_[f_]=r[f_]
+        r['_drop']=1
+    elif v.get('drop'): r['_drop']=1
+    for f_ in ('y', 'q'):
+        if f_ in v and not r.get('_drop'): r[f_]=v[f_]
+for k_, v in _OVR.items():                    # 합쳐진 쪽에 적힌 시기는 남은 작품에 적용
+    if v.get('into') in _byk:
+        for f_ in ('y', 'q'):
+            if f_ in v: _byk[v['into']][f_]=v[f_]
+merged=[r for r in merged if not r.pop('_drop', None)]
 print('뮤직비디오로 분류', sum(1 for r in merged if r['ty'] == 'P'))
 print('중복 합치기:', len(out), '→', len(merged))
 out = merged
