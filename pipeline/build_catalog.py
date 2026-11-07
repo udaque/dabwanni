@@ -142,7 +142,11 @@ for x in a:
     if ja and len(ja) <= 4:                               # 「幼ラブ」처럼 짧은 줄임말이 뽑혔으면, 같은 글자로 시작하는 긴 정식 제목으로
         ja=next((y for y in x['synonyms'] if y[:1]==ja[:1] and len(y) >= len(ja)+4 and kana.search(y) and not hangul.search(y)), None) or ja
     if ja and re.fullmatch(r'[ぁ-ん]{2,6}', ja):          # 「るるりり」 같은 히라가나 줄임말이 뽑히면 정식 제목으로
-        ja=next((y for y in x['synonyms'] if re.search(r'[\u30a0-\u30ff\u4e00-\u9fff]', y) and len(y) >= 6 and not hangul.search(y)), None) or ja
+        ja=next((y for y in x['synonyms'] if re.search(r'[\u30a0-\u30ff\u4e00-\u9fff]', y) and len(y) >= 6 and not hangul.search(y)
+                 and (kana.search(y) or not (_SIMP.search(y) or _ZHSEA.search(y) or _TRAD.search(y)))), None) or ja      # 중국어 이름은 고르지 않음 (「あっちこっち」→「一起一起这里那里」였던 문제)
+    if ja and not kana.search(ja) and (_SIMP.search(ja) or _ZHSEA.search(ja) or _TRAD.search(ja)):      # 마지막으로 한 번 더 막음
+        kc=[y for y in x['synonyms'] if kana.search(y) and not hangul.search(y)]
+        ja=max(kc, key=lambda y: ja_like(y, x['title'])) if kc else None
     ko=pick(t,'ko') or next((y for y in x['synonyms'] if hangul.search(y)),None)
     ko=add_season(ko, pick(t,'ja') or next((y for y in x['synonyms'] if kana.search(y)),None), x['title'])
     en=pick(t,'en') ; ro=pick(t,'x-jat',('main','official','syn')) or x['title']
