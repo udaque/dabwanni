@@ -103,6 +103,7 @@ if ALS:
 # 중국어 간체 전용 글자나 「第二季」식 시즌 표기가 있으면 중국 작품으로 봄 (「爱上她的理由 第二季」)
 _SIMP=re.compile('[爱们这说时为龙门东车马鸟鱼书长开关战么还进让识风飞华专业丝两严丰乐习乡买亲亿仅从仓价优伟传伤侠侣侦侧俩债倾剧剑带师归异记设许论诗话语误请读谁调谈课账货贵费赵转轮软载辈边达迁过运远连迟选递逻遗邮释钟钱铁银锁问间闻阳阴阵陆陈难页顶项顺须顾领频题颜馆驱验骑鲁鲜鸡鸣鸭]')
 _ZHSEA=re.compile(r'第[一二三四五六七八九十0-9]+季')
+_TRAD=re.compile('[這裡們麼說嗎吧呢哪誰]')      # 일본어에서 거의 안 쓰는 번체·구어 글자
 def looks_chinese(x):
     if any('anilist.co' in u for u in x['sources']): return False      # AniList에 있는 작품은 AniList의 제작 국가 정보를 따름
     names=[x.get('title') or '']+list(x.get('synonyms') or [])
@@ -133,6 +134,11 @@ for x in a:
         # (「Fujimoto Tatsuki 17-26」에 회차 제목 「シカク」, 「Golden Kamuy: Inazuma Goutou…」에 「…シマエナガ」가 뽑히던 문제)
         cands=[y for y in x['synonyms'] if not hangul.search(y) and (kana.search(y) or cjk.search(y))]
         ja=max(cands, key=lambda y: ja_like(y, x['title']), default=None) if cands else None
+    # 일본어 제목으로 중국어 이름이 뽑힌 경우(「Acchi Kocchi」에 「一起一起这里那里」): 가나가 없고 중국어 전용 글자·「第N季」가 있으면
+    # 가나가 든 다른 이름 중 대표 로마자 제목과 가장 닮은 것으로, 없으면 비움 (한국·중국 작품에 중국어 제목이 붙는 것도 막음)
+    if ja and not kana.search(ja) and (_SIMP.search(ja) or _ZHSEA.search(ja) or _TRAD.search(ja)):
+        kc=[y for y in x['synonyms'] if kana.search(y) and not hangul.search(y)]
+        ja=max(kc, key=lambda y: ja_like(y, x['title'])) if kc else None
     if ja and len(ja) <= 4:                               # 「幼ラブ」처럼 짧은 줄임말이 뽑혔으면, 같은 글자로 시작하는 긴 정식 제목으로
         ja=next((y for y in x['synonyms'] if y[:1]==ja[:1] and len(y) >= len(ja)+4 and kana.search(y) and not hangul.search(y)), None) or ja
     if ja and re.fullmatch(r'[ぁ-ん]{2,6}', ja):          # 「るるりり」 같은 히라가나 줄임말이 뽑히면 정식 제목으로
