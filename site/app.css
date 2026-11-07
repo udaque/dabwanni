@@ -259,7 +259,8 @@ html{touch-action:manipulation}
 .stscope button{color:var(--sub)}
 .stscope button.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .hbars .lab .link{font-size:13px;max-width:9.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom;text-align:left}
-.stag{display:inline-block;vertical-align:.12em;font-size:.68em;font-weight:800;line-height:1;padding:.32em .5em;border-radius:6px;background:var(--chip);color:var(--ink);white-space:nowrap;margin-left:.15em}
+/* 시즌 꼬리표: inline-block이면 사파리가 두 줄 자르기에서 넘치지 않아도 「…」를 붙여서 inline으로 */
+.stag{display:inline;vertical-align:.12em;font-size:.68em;font-weight:800;line-height:inherit;padding:.18em .5em;border-radius:6px;background:var(--chip);color:var(--ink);white-space:nowrap;margin-left:.15em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .shead img.pf{width:84px;aspect-ratio:1}
 .vafilt{margin-bottom:10px}
 .hbars .bar[data-tog]{cursor:pointer}
