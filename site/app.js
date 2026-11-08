@@ -124,6 +124,10 @@ function applyTheme(){
 // 고정 화면 글자(index.html의 data-i18n 표시)를 고른 언어로
 function applyLang(){
   document.documentElement.lang = S.lang;
+  // 페이지 이름·파비콘·홈 화면 앱 이름은 고른 언어로 (한국어 다봤니, 일본어 ダバニ, 영어 DaBANI)
+  const L = ['ko', 'ja', 'en'].includes(S.lang) ? S.lang : 'ko', NAME = {ko: '다봤니', ja: 'ダバニ', en: 'DaBANI'}[L];
+  document.title = NAME; $('#apptitle')?.setAttribute('content', NAME);
+  $('#favicon')?.setAttribute('href', `img/icon-${L}-32.png`); $('#touchicon')?.setAttribute('href', `img/icon-${L}-180.png`); $('#manifest')?.setAttribute('href', `manifest-${L}.json`);
   if (W.length) $('#totalPill').textContent = F('count', fmtN(W.length));
   document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n).replace(/^탭:/, ''));
   document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
@@ -168,6 +172,7 @@ async function boot(){
   $('#totalPill').textContent = F('count', fmtN(W.length));
   bind(); route(); render();
   loadEdits(); initSync();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});      // 홈 화면 앱
   if (location.hash === '#comics-import') { history.replaceState('', '', location.pathname + location.search); setMode('comic'); }
   else if (store.get('mode', 'anime') === 'comic') setMode('comic');
   else $('#modeBtn').textContent = t('만화책');

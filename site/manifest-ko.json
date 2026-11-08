@@ -1,0 +1,31 @@
+{
+ "name": "다봤니",
+ "short_name": "다봤니",
+ "description": "일본·한국 애니메이션 데이터베이스와 시청 기록",
+ "lang": "ko",
+ "start_url": "/",
+ "scope": "/",
+ "display": "standalone",
+ "background_color": "#10151E",
+ "theme_color": "#10151E",
+ "icons": [
+  {
+   "src": "/img/icon-ko-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/img/icon-ko-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "/img/icon-ko-512-mask.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
