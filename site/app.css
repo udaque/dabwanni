@@ -73,7 +73,7 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 
 .sheet{position:fixed;inset:0;z-index:20}
 .sheetbg{position:absolute;inset:0;background:rgba(10,14,20,.55)}
-.sheetbody{position:absolute;inset:auto 0 0 0;max-height:92dvh;overflow:auto;background:var(--surface);border-radius:18px 18px 0 0;padding:0 0 calc(24px + env(safe-area-inset-bottom,0px))}
+.sheetbody{position:absolute;inset:auto 0 0 0;max-height:calc(100% - max(env(safe-area-inset-top,0px) + 12px, 8%));overflow:auto;background:var(--surface);border-radius:18px 18px 0 0;padding:0 0 calc(24px + env(safe-area-inset-bottom,0px))}
 @media(min-width:760px){.sheetbody{inset:5vh auto auto 50%;transform:translateX(-50%);width:720px;max-height:90vh;border-radius:18px}}
 .shead{display:grid;grid-template-columns:120px 1fr;gap:14px;padding:18px 58px 8px 18px;position:relative}
 .shead img,.shead .ph{width:120px;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:var(--chip)}

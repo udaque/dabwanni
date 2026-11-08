@@ -701,10 +701,10 @@ function seasonCounts(){
 }
 function openPicker(){
   pk = {y: S.y, c: seasonCounts()};
-  $('#picker').hidden = false; document.body.style.overflow = 'hidden';
+  if ($('#picker').hidden) lockScroll(); $('#picker').hidden = false;
   drawPicker(true);
 }
-function closePicker(){ $('#picker').hidden = true; if ($('#sheet').hidden) document.body.style.overflow = ''; pk = null; }
+function closePicker(){ if (!$('#picker').hidden) unlockScroll(); $('#picker').hidden = true; pk = null; }
 function drawPicker(scroll){
   const c = pk.c, a = c.get(pk.y) || [0, 0, 0, 0, 0];
   $('#pkQ').innerHTML = [1, 2, 3, 4].map(q => `<button class="qb ${pk.y === S.y && q === S.qq ? 'on' : ''}" data-pq="${q}" ${a[q] ? '' : 'disabled'}><b>${F('quarter', q)}</b><small>${F('quarterMonths', q)}</small><span class="pill">${fmtN(a[q])}</span></button>`).join('');
@@ -906,14 +906,27 @@ function route(){
   const id = decodeURIComponent(m[2]);
   ({w:openWork, p:openPerson, s:openStudio})[m[1]](id);
 }
+// 뒤 화면 스크롤 막기: body에 overflow:hidden만 걸면 아이폰 홈 화면 앱에서 스크롤 관성이 남아 있을 때
+// 화면에 고정된 창(상세 창 등)이 엉뚱한 위치에 그려지는 문제가 있어, 지금 위치에서 body를 통째로 고정했다가 닫을 때 되돌림
+let LOCK = 0, LOCK_Y = 0;
+function lockScroll(){
+  if (LOCK++) return;
+  LOCK_Y = window.scrollY;
+  Object.assign(document.body.style, {position: 'fixed', top: -LOCK_Y + 'px', left: '0', right: '0', width: '100%', overflow: 'hidden'});
+}
+function unlockScroll(){
+  if (!LOCK || --LOCK) return;
+  Object.assign(document.body.style, {position: '', top: '', left: '', right: '', width: '', overflow: ''});
+  window.scrollTo(0, LOCK_Y);
+}
 function closeSheet(fromRoute){
-  $('#sheet').hidden = true; document.body.style.overflow = '';
+  if (!$('#sheet').hidden) unlockScroll(); $('#sheet').hidden = true;
   if (!fromRoute && location.hash) history.pushState('', '', location.pathname + location.search);
   render();
 }
 function showSheet(html){
   $('#sheetBody').innerHTML = `<button class="close" data-close aria-label="${t('닫기')}">✕</button>` + html + (usedAuto && S.lang === 'ko' ? `<p class="legend"><span class="auto">점선 밑줄</span>은 공식 한국어 표기를 찾지 못해 자동으로 옮긴 이름이라 읽는 법이 틀릴 수 있습니다.</p>` : '');
-  $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+  if ($('#sheet').hidden) lockScroll(); $('#sheet').hidden = false;
   $('#sheetBody').focus({preventScroll:true});
 }
 async function openWork(k){
