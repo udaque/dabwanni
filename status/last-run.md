@@ -1,37 +1,39 @@
 ## 다봤니 데이터 갱신 결과
 
-전체 41.7분
+전체 15.5분
 
 | 단계 | 결과 | 새로 받음 | 빈 결과 | 실패 | 최신이라 건너뜀 | 시간(분) |
 |---|---|---|---|---|---|---|
-| catalog | ✅ 성공 |  |  |  |  |  |
+| catalog | ⏭ 건너뜀 |  |  |  |  |  |
 | wikidata | ⏭ 건너뜀 |  |  |  |  |  |
 | syoboi | ⏭ 건너뜀 |  |  |  |  |  |
 | jawiki | ✅ 성공 | 0 | 1 | 0 | 2722 | 0.0 |
 | animethemes | ⏭ 건너뜀 |  |  |  |  |  |
-| tmdb | ✅ 성공 | 21 | 38 | 0 | 6925 | 0.6 |
-| anilist | ✅ 성공 | 55 | 1 | 0 | 19108 | 10.2 |
+| tmdb | ✅ 성공 | 1 | 38 | 0 | 6945 | 0.2 |
+| anilist | ✅ 성공 | 0 | 1 | 0 | 19163 | 0.1 |
 | anilist_people | ✅ 성공 | 0 | 0 | 0 | 0 | 0.0 |
-| music | ⏸ 일부 (다음에 이어 받음) | 31 | 210 | 0 | 12400 | 25.8 |
+| music | ❌ 실패 | 0 | 0 | 0 | 0 | 0.1 |
 | anitabi | ⏭ 건너뜀 |  |  |  |  |  |
 | laftel | ⏭ 건너뜀 |  |  |  |  |  |
 | namu_live | ⏭ 건너뜀 |  |  |  |  |  |
 | youtube | ⏭ 건너뜀 | 0 | 0 | 0 | 0 | 0.0 |
-| kowiki | ✅ 성공 | 0 | 3 | 0 | 3562 | 0.0 |
-| thumbhash | ✅ 성공 | 3 | 0 | 0 | 253 | 0.0 |
+| kowiki | ⏸ 일부 (다음에 이어 받음) | 4 | 1291 | 0 | 962 | 12.8 |
+| thumbhash | ✅ 성공 | 0 | 0 | 0 | 256 | 0.0 |
 | namu | ⏭ 건너뜀 |  |  |  |  |  |
 | build | ✅ 성공 | 23579 | 0 | 0 | 0 |  |
-| anilist_season | ✅ 성공 | 12 | 0 | 0 | 0 | 1.1 |
 
 ### 자세한 내용
+- **catalog** (⏭ 건너뜀): 1일 주기, 최근 성공 2026-11-26
 - **wikidata** (⏭ 건너뜀): 7일 주기, 최근 성공 2026-11-24
 - **syoboi** (⏭ 건너뜀): 집 PC에서 따로 실행 (home_syoboi.sh)
 - **animethemes** (⏭ 건너뜀): 집 PC에서 따로 실행 (home_syoboi.sh)
-- **music** (⏸ 일부 (다음에 이어 받음)): 시간 예산 소진, 다음 실행에서 이어 받음
+- **music** (❌ 실패): 시험 요청 실패 (MusicBrainz 검색): https://musicbrainz.org/ws/2/release-group?fmt=json&limit=1&query=cowboy%20bebop 반복 실패: 503 {"error": "The MusicBrainz web server is currently busy. Please try again later."}
+
 - **anitabi** (⏭ 건너뜀): 집 PC에서 따로 실행 (home_syoboi.sh)
 - **laftel** (⏭ 건너뜀): 집 PC에서 따로 실행 (home_syoboi.sh)
 - **namu_live** (⏭ 건너뜀): 집 PC에서 따로 실행 (home_syoboi.sh)
 - **youtube** (⏭ 건너뜀): YOUTUBE_API_KEY가 설정되지 않음 (PV는 키 없이 AniList 예고편으로 나옴)
+- **kowiki** (⏸ 일부 (다음에 이어 받음)): 시간 예산 소진, 다음 실행에서 이어 받음
 - **namu** (⏭ 건너뜀): 25일 주기, 최근 성공 2026-11-21
 
 전체 로그는 이 실행의 첨부 파일(logs)에 있습니다. 출처별 오류 상세는 `<단계>.jsonl`, 출력 전체는 `<단계>.out`을 보세요.
